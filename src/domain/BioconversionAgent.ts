@@ -1,8 +1,9 @@
 /**
- * src/domain/BioconversionAgent.ts
- * Agente de IA para optimización de bioconversión.
- * Complejidad: O(1) - Tiempo constante de ejecución.
+ * src/dominio/BioconversionAgent.ts
+ * IA para optimización de bioconversión.
+ * Complejidad: O(1) - Tiempo constante.
  */
+
 export interface ReactorState {
     pH: number;
     temperature: number;
@@ -21,6 +22,12 @@ export class BioconversionAgent {
 }
 
 // Caso de prueba unitario
-// test('Valida decisión de pH fuera de rango')
-const agent = new BioconversionAgent();
-console.assert(agent.executeDecision({pH: 4.0, temperature: 25}) === "ACTION: ADJUST_SUBSTRATE_ACIDITY");
+function runTest() {
+    const agent = new BioconversionAgent();
+    const testResult = agent.executeDecision({ pH: 4.0, temperature: 25 });
+    
+    console.assert(testResult === "ACTION: ADJUST_SUBSTRATE_ACIDITY", "Test falló: pH fuera de rango");
+    console.log("Test unitario pasado exitosamente.");
+}
+
+runTest();
