@@ -1,14 +1,15 @@
 # BioSustain: Plataforma SaaS de Bioconversión
 
 ## Arquitectura Técnica
-Sistema distribuido basado en eventos (Event-Driven) diseñado para el monitoreo autónomo, escalable y en tiempo real de bioconversión con larvas de Mosca Soldado Negra (BSF).
+Sistema distribuido basado en eventos diseñado para el monitoreo autónomo, escalable y en tiempo real.
 
-```mermaid
+``` ```mermaid 
 graph LR
     A[Sensores IoT] --> B(Google Cloud Pub/Sub)
     B --> C{Worker Cloud Run}
     C --> D[(Database/Storage)]
-    C --> E[Dashboard Health Check]
+    C --> E[Dashboard Health Check] `` `` ``
+    
 Pilares de Ingeniería
 Escalabilidad (O(1)): Procesamiento asíncrono vía Pub/Sub que permite escalar a múltiples reactores sin latencia.
 Seguridad: Implementación de Secret Manager para gestión de credenciales y cuentas de servicio con privilegios mínimos (IAM).
