@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=biosustain
+      - DB_USER=biosustain
+      - DB_PASS=biosustain_dev
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=biosustain
+      - POSTGRES_USER=biosustain
+      - POSTGRES_PASSWORD=biosustain_dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  influxdb:
+    image: influxdb:2.7-alpine
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=biosustain
+      - DOCKER_INFLUXDB_INIT_PASSWORD=biosustain_dev
+      - DOCKER_INFLUXDB_INIT_ORG=biosustain
+      - DOCKER_INFLUXDB_INIT_BUCKET=sensors
+    volumes:
+      - influxdata:/var/lib/influxdb2
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+volumes:
+  pgdata:
+  influxdata:
