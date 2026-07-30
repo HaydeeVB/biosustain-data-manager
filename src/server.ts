@@ -76,20 +76,25 @@ app.get('/api/v1/health', (_req: Request, res: Response) => {
 import authRoutes from './routes/auth';
 app.use('/api/v1/auth', authRoutes);
 
+// NDA (click-wrap)
+import ndaRoutes from './routes/nda';
+app.use('/api/v1/nda', ndaRoutes);
+
 // Protected routes (require JWT)
 import { authenticateToken } from './middleware/auth';
+import { auditLog } from './middleware/audit';
 
 // Cestas (multi-tenant — cada cliente ve solo las suyas)
 import cestaRoutes from './routes/cestas';
-app.use('/api/v1/cestas', authenticateToken, cestaRoutes);
+app.use('/api/v1/cestas', authenticateToken, auditLog, cestaRoutes);
 
 // Dashboard
 import dashboardRoutes from './routes/dashboard';
-app.use('/api/v1/dashboard', authenticateToken, dashboardRoutes);
+app.use('/api/v1/dashboard', authenticateToken, auditLog, dashboardRoutes);
 
 // ESG metrics
 import esgRoutes from './routes/esg';
-app.use('/api/v1/esg', authenticateToken, esgRoutes);
+app.use('/api/v1/esg', authenticateToken, auditLog, esgRoutes);
 
 // IoT ingesta (API key auth, no JWT — para ESP32)
 import iotRoutes from './routes/iot';

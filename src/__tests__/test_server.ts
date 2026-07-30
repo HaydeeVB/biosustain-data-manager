@@ -219,6 +219,48 @@ describe('BioSustain SaaS API', () => {
     });
   });
 
+  describe('NDA (click-wrap)', () => {
+    let token: string;
+
+    beforeAll(async () => {
+      const email = `nda_${Date.now()}@example.com`;
+      const res = await request(app)
+        .post('/api/v1/auth/register')
+        .send({ nombre: 'Test NDA', email, password: 'TestPassword123!' });
+      token = res.body.token;
+    });
+
+    it('GET /api/v1/nda → 200 con texto del NDA', async () => {
+      const res = await request(app).get('/api/v1/nda');
+      expect(res.status).toBe(200);
+      expect(res.body.texto).toContain('CONFIDENCIALIDAD');
+      expect(res.body.requiereAceptacion).toBe(true);
+    });
+
+    it('POST /api/v1/nda/accept → 200 acepta NDA', async () => {
+      const res = await request(app)
+        .post('/api/v1/nda/accept')
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+    });
+
+    it('POST /api/v1/nda/accept → 200 ya aceptado', async () => {
+      const res = await request(app)
+        .post('/api/v1/nda/accept')
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+    });
+
+    it('GET /api/v1/nda/status → 200 muestra aceptación', async () => {
+      const res = await request(app)
+        .get('/api/v1/nda/status')
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+      expect(res.body.aceptado).toBe(true);
+    });
+  });
+
   describe('404', () => {
     it('GET /api/v1/nonexistent → 404', async () => {
       const res = await request(app).get('/api/v1/nonexistent');
