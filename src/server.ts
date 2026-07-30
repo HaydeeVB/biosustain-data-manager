@@ -100,6 +100,10 @@ app.use('/api/v1/esg', authenticateToken, auditLog, esgRoutes);
 import iotRoutes from './routes/iot';
 app.use('/api/v1/iot', iotRoutes);
 
+// Cerebro bridge (encrypted request/response to private model server)
+import cerebroRoutes from './routes/cerebro';
+app.use('/api/v1/cerebro', authenticateToken, auditLog, cerebroRoutes);
+
 // ── Manejo de errores ─────────────────────────────────────────────────────────
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

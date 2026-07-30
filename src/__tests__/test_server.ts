@@ -261,6 +261,70 @@ describe('BioSustain SaaS API', () => {
     });
   });
 
+  describe('Cerebro bridge', () => {
+    let token: string;
+
+    beforeAll(async () => {
+      const email = `cerebro_${Date.now()}@example.com`;
+      const res = await request(app)
+        .post('/api/v1/auth/register')
+        .send({ nombre: 'Test Cerebro', email, password: 'TestPassword123!' });
+      token = res.body.token;
+    });
+
+    it('POST /api/v1/cerebro/biomass-projection → 200 (modo demo)', async () => {
+      const res = await request(app)
+        .post('/api/v1/cerebro/biomass-projection')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          cestaId: 'CESTA-01',
+          biomasaInicialKg: 2.0,
+          sustratoInicialKg: 50.0,
+          temperaturaPromedio: 28.2,
+          humedadPromedio: 65.4,
+          diasAProyectar: 5,
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.resultado).toBeDefined();
+    });
+
+    it('POST /api/v1/cerebro/water-balance → 200 (modo demo)', async () => {
+      const res = await request(app)
+        .post('/api/v1/cerebro/water-balance')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          cestaId: 'CESTA-01',
+          humedadActual: 61.2,
+          temperaturaActual: 29.5,
+          extractorActivo: true,
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.resultado).toBeDefined();
+    });
+
+    it('POST /api/v1/cerebro/biomass-projection → 400 params inválidos', async () => {
+      const res = await request(app)
+        .post('/api/v1/cerebro/biomass-projection')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ cestaId: '', biomasaInicialKg: -1 });
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('POST /api/v1/cerebro/gemini-diagnostic → 200 (modo demo)', async () => {
+      const res = await request(app)
+        .post('/api/v1/cerebro/gemini-diagnostic')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          cestaId: 'CESTA-01',
+          metricas: { temperatura: 34, humedad: 55 },
+          pregunta: '¿Cómo va mi lote?',
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.resultado).toBeDefined();
+    });
+  });
+
   describe('404', () => {
     it('GET /api/v1/nonexistent → 404', async () => {
       const res = await request(app).get('/api/v1/nonexistent');
