@@ -104,6 +104,10 @@ app.use('/api/v1/iot', iotRoutes);
 import cerebroRoutes from './routes/cerebro';
 app.use('/api/v1/cerebro', authenticateToken, auditLog, cerebroRoutes);
 
+// Billing (mock gateway — MercadoPago blocked for Venezuela)
+import billingRoutes from './routes/billing';
+app.use('/api/v1/billing', billingRoutes);
+
 // ── Manejo de errores ─────────────────────────────────────────────────────────
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
