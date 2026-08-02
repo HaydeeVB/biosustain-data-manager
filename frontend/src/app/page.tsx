@@ -19,7 +19,7 @@ const C = {
   greenGlow: 'rgba(62, 176, 2, 0.12)',
   text: '#e8e8e8',
   text2: '#9a9a9a',
-  text3: '#555',
+  text3: '#8a8a8a',
   warn: '#e8a000',
   danger: '#ff5a5a',
   font: "'Inter', -apple-system, sans-serif",
@@ -181,7 +181,7 @@ export default function DashboardPage() {
 
               <button onClick={view === 'login' ? handleLogin : handleRegister} disabled={loading} style={{
                 width: '100%', padding: 14, borderRadius: 12, border: 'none', cursor: loading ? 'wait' : 'pointer',
-                background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: C.font,
+                background: C.green, color: '#060a06', fontSize: 15, fontWeight: 700, fontFamily: C.font,
                 boxShadow: `0 4px 20px ${C.greenGlow}`, opacity: loading ? 0.6 : 1,
               }}>
                 {loading ? 'Procesando...' : view === 'login' ? 'Entrar al panel' : 'Crear cuenta'}
@@ -206,7 +206,8 @@ export default function DashboardPage() {
     { key: 'lotes', label: 'Lotes', icon: '🌱' },
     { key: 'esg', label: 'ESG', icon: '🌍' },
     { key: 'facturacion', label: 'Facturación', icon: '💳' },
-    { key: 'ajustes', label: 'Ajustes', icon: '⚙️' },
+    // Ajustes tab hidden until SEC-BS-006 is fixed (auth middleware not mounted)
+    // { key: 'ajustes', label: 'Ajustes', icon: '⚙️' },
   ] as const;
 
   return (
@@ -237,7 +238,7 @@ export default function DashboardPage() {
         {/* Nav */}
         <nav style={{ flex: 1, padding: '16px 12px' }}>
           {navItems.map((item) => (
-            <button key={item.key} onClick={() => setTab(item.key)} style={navItemStyle(tab === item.key)}>
+            <button key={item.key} onClick={() => { setTab(item.key); setSidebarOpen(false); }} style={navItemStyle(tab === item.key)}>
               <span style={{ fontSize: 18 }}>{item.icon}</span>
               <span>{item.label}</span>
             </button>
@@ -657,7 +658,7 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
 
       <button onClick={handleSubmit} disabled={loading || !tipoResiduo || !pesoKg || !cestaId} style={{
         padding: '12px 28px', borderRadius: 12, border: 'none', cursor: loading ? 'wait' : 'pointer',
-        background: '#3eb002', color: '#fff', fontSize: 14, fontWeight: 700, fontFamily: "'Inter', sans-serif",
+        background: '#3eb002', color: '#060a06', fontSize: 14, fontWeight: 700, fontFamily: "'Inter', sans-serif",
         marginTop: 16, boxShadow: '0 4px 14px rgba(62,176,2,0.25)', opacity: loading ? 0.6 : 1,
       }}>
         {loading ? 'Registrando...' : 'Registrar lote'}
@@ -781,7 +782,7 @@ function SettingsPanel({ token, cliente, onUpdate }: { token: string | null; cli
           <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
             <button onClick={handleSaveProfile} disabled={loading} style={{
               padding: '10px 24px', borderRadius: 10, border: 'none', cursor: loading ? 'wait' : 'pointer',
-              background: '#3eb002', color: '#fff', fontSize: 14, fontWeight: 600, fontFamily: "'Inter', sans-serif",
+              background: '#3eb002', color: '#060a06', fontSize: 14, fontWeight: 600, fontFamily: "'Inter', sans-serif",
               opacity: loading ? 0.6 : 1,
             }}>{loading ? 'Guardando...' : 'Guardar cambios'}</button>
           </div>
@@ -823,7 +824,7 @@ function SettingsPanel({ token, cliente, onUpdate }: { token: string | null; cli
 
           <button onClick={handleChangePassword} disabled={loading || !oldPass || !newPass} style={{
             padding: '10px 24px', borderRadius: 10, border: 'none', cursor: loading ? 'wait' : 'pointer',
-            background: '#3eb002', color: '#fff', fontSize: 14, fontWeight: 600, fontFamily: "'Inter', sans-serif",
+            background: '#3eb002', color: '#060a06', fontSize: 14, fontWeight: 600, fontFamily: "'Inter', sans-serif",
             marginTop: 20, opacity: loading ? 0.6 : 1,
           }}>{loading ? 'Actualizando...' : 'Cambiar contraseña'}</button>
 

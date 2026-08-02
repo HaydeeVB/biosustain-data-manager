@@ -1,6 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+:root { color-scheme: dark; }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -34,12 +36,19 @@ body::after {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #1a2515; border-radius: 3px; }
 
-input:focus, select:focus, button:focus { outline: none; }
+input:focus, select:focus { outline: none; }
 input:focus, select:focus {
   border-color: #3eb002 !important;
   box-shadow: 0 0 0 3px rgba(62, 176, 2, 0.12) !important;
 }
 
+button:focus { outline: none; }
+button:focus-visible {
+  outline: 2px solid #3eb002;
+  outline-offset: 2px;
+}
+
+button:disabled { opacity: 0.45; cursor: not-allowed; }
 button { transition: all 0.15s ease; }
 button:hover:not(:disabled) { filter: brightness(1.1); }
 button:active:not(:disabled) { transform: scale(0.98); }
@@ -84,7 +93,7 @@ button:active:not(:disabled) { transform: scale(0.98); }
     position: relative;
     transform: translateX(0);
   }
-  .main-content { padding: 32px 40px; }
+  .main-content { padding: 32px 40px; max-width: 1440px; margin: 0 auto; }
   .menu-btn { display: none; }
   .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .cesta-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
