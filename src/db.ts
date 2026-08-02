@@ -1,8 +1,8 @@
 /**
- * db.ts — Conexión a TimescaleDB (PostgreSQL).
+ * db.ts — Conexión a PostgreSQL (Cloud SQL).
  *
- * Pool de conexiones con manejo de errores.
- * Si DATABASE_URL no está configurada, usa modo demo (en memoria).
+ * Usa variables individuales (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
+ * o DATABASE_URL si está disponible.
  */
 import { Pool, PoolClient, QueryResult } from 'pg';
 import dotenv from 'dotenv';
@@ -11,48 +11,51 @@ dotenv.config();
 
 let pool: Pool | null = null;
 
-/**
- * Inicializa el pool de conexiones si DATABASE_URL está configurada.
- */
 export function initDb(): void {
   const dbUrl = process.env.DATABASE_URL;
+  const dbHost = process.env.DB_HOST;
+  const dbPort = process.env.DB_PORT || '5432';
+  const dbName = process.env.DB_NAME || 'biosustain';
+  const dbUser = process.env.DB_USER || 'postgres';
+  const dbPassword = process.env.DB_PASSWORD;
+
   if (dbUrl) {
     pool = new Pool({
       connectionString: dbUrl,
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
+      ssl: { rejectUnauthorized: false },
     });
-    console.log('[DB] Pool de conexiones inicializado.');
+    console.log('[DB] Pool inicializado via DATABASE_URL');
+  } else if (dbHost) {
+    pool = new Pool({
+      host: dbHost,
+      port: parseInt(dbPort, 10),
+      database: dbName,
+      user: dbUser,
+      password: dbPassword,
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      ssl: { rejectUnauthorized: false },
+    });
+    console.log(`[DB] Pool inicializado: ${dbHost}:${dbPort}/${dbName}`);
   } else {
-    console.warn('[DB] DATABASE_URL no configurada — modo demo (sin base de datos real).');
+    console.warn('[DB] Sin configuración — modo demo (sin base de datos).');
   }
 }
 
-/**
- * Ejecuta una consulta SQL.
- * Si no hay pool, lanza error.
- */
 export async function query(text: string, params?: unknown[]): Promise<QueryResult> {
-  if (!pool) {
-    throw new Error('Base de datos no configurada. Set DATABASE_URL en .env');
-  }
+  if (!pool) throw new Error('Base de datos no configurada.');
   return pool.query(text, params);
 }
 
-/**
- * Obtiene un cliente del pool (para transacciones).
- */
 export async function getClient(): Promise<PoolClient> {
-  if (!pool) {
-    throw new Error('Base de datos no configurada. Set DATABASE_URL en .env');
-  }
+  if (!pool) throw new Error('Base de datos no configurada.');
   return pool.connect();
 }
 
-/**
- * Verifica la conexión a la base de datos.
- */
 export async function checkDbConnection(): Promise<boolean> {
   if (!pool) return false;
   try {
@@ -63,9 +66,6 @@ export async function checkDbConnection(): Promise<boolean> {
   }
 }
 
-/**
- * Cierra el pool de conexiones.
- */
 export async function closeDb(): Promise<void> {
   if (pool) {
     await pool.end();

@@ -82,6 +82,10 @@ app.use('/api/v1/nda', ndaRoutes);
 
 // Protected routes (require JWT)
 import { authenticateToken } from './middleware/auth';
+import { initDb } from './db';
+
+// Initialize database connection
+initDb();
 import { auditLog } from './middleware/audit';
 
 // Cestas (multi-tenant — cada cliente ve solo las suyas)
@@ -107,6 +111,14 @@ app.use('/api/v1/cerebro', authenticateToken, auditLog, cerebroRoutes);
 // Billing (mock gateway — MercadoPago blocked for Venezuela)
 import billingRoutes from './routes/billing';
 app.use('/api/v1/billing', billingRoutes);
+
+// Lotes (manual lot registration — conference demo)
+import lotesRoutes from './routes/lotes';
+app.use('/api/v1/lotes', authenticateToken, auditLog, lotesRoutes);
+
+// Reports (ESG PDF export)
+import reportsRoutes from './routes/reports';
+app.use('/api/v1/reports', authenticateToken, auditLog, reportsRoutes);
 
 // ── Manejo de errores ─────────────────────────────────────────────────────────
 

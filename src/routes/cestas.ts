@@ -1,7 +1,6 @@
 /**
- * cestas.ts — Rutas de cestas (multi-tenant).
+ * cestas.ts — Rutas de cestas con PostgreSQL.
  *
- * Cada cliente solo ve sus propias cestas.
  * GET  /api/v1/cestas            → listar cestas del cliente
  * GET  /api/v1/cestas/:id        → detalle de una cesta
  * GET  /api/v1/cestas/:id/metrics → telemetría de una cesta
@@ -11,125 +10,117 @@ import { query, isDbConfigured } from '../db';
 
 const router = Router();
 
-// ── Almacenamiento en memoria (modo demo) ─────────────────────────────────────
+// In-memory fallback
+const cestasEnMemoria = new Map<string, any>();
 
-interface Cesta {
-  id: string;
-  clienteId: string;
-  ubicacion: string;
-  fechaInstalacion: string;
-  activa: boolean;
-}
-
-const cestasEnMemoria: Map<string, Cesta> = new Map();
-
-// ── Endpoints ──────────────────────────────────────────────────────────────────
-
-/**
- * GET /api/v1/cestas
- * Lista las cestas del cliente autenticado.
- */
-router.get('/', (req: Request, res: Response) => {
-  const clienteId = req.cliente?.clienteId;
+router.get('/', async (req: Request, res: Response) => {
+  const clienteId = (req as any).cliente?.clienteId;
   if (!clienteId) {
     res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
     return;
   }
 
-  // Filtrar cestas del cliente
-  const cestas = Array.from(cestasEnMemoria.values())
-    .filter(c => c.clienteId === clienteId)
-    .map(c => ({
-      id: c.id, ubicacion: c.ubicacion,
-      fechaInstalacion: c.fechaInstalacion, activa: c.activa,
-    }));
-
-  res.json({ cestas, total: cestas.length });
-});
-
-/**
- * GET /api/v1/cestas/:id
- * Devuelve el detalle de una cesta específica.
- * Verifica que la cesta pertenezca al cliente.
- */
-router.get('/:id', (req: Request, res: Response) => {
-  const clienteId = req.cliente?.clienteId;
-  if (!clienteId) {
-    res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
-    return;
-  }
-
-  const cestaId = req.params.id as string;
-  const cesta = cestasEnMemoria.get(cestaId);
-  if (!cesta) {
-    res.status(404).json({ error: 'Cesta no encontrada.', code: 'CESTA_NOT_FOUND' });
-    return;
-  }
-
-  // Multi-tenant: verificar propiedad
-  if (cesta.clienteId !== clienteId) {
-    res.status(403).json({ error: 'No tiene acceso a esta cesta.', code: 'FORBIDDEN' });
-    return;
-  }
-
-  res.json(cesta);
-});
-
-/**
- * GET /api/v1/cestas/:id/metrics
- * Devuelve la telemetría más reciente de una cesta.
- * Verifica que la cesta pertenezca al cliente.
- */
-router.get('/:id/metrics', async (req: Request, res: Response) => {
-  const clienteId = req.cliente?.clienteId;
-  if (!clienteId) {
-    res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
-    return;
-  }
-
-  const cestaIdMetric = req.params.id as string;
-  const cesta = cestasEnMemoria.get(cestaIdMetric);
-  if (!cesta) {
-    res.status(404).json({ error: 'Cesta no encontrada.', code: 'CESTA_NOT_FOUND' });
-    return;
-  }
-
-  if (cesta.clienteId !== clienteId) {
-    res.status(403).json({ error: 'No tiene acceso a esta cesta.', code: 'FORBIDDEN' });
-    return;
-  }
-
-  // Si hay DB, consultar telemetría real
   if (isDbConfigured()) {
     try {
-      const limit = Math.min(parseInt(String(req.query.limit) || '100'), 1000);
+      const result = await query(
+        `SELECT c.id, c.ubicacion, c.fecha_instalacion, c.activa,
+                (SELECT t.temp_ambiente FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultima_temp,
+                (SELECT t.humedad_relativa FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultima_humedad,
+                (SELECT t.biomasa_larvaria_estimada_kg FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultima_biomasa
+         FROM cestas c
+         WHERE c.cliente_id = $1
+         ORDER BY c.fecha_instalacion DESC`,
+        [clienteId]
+      );
+
+      const cestas = result.rows.map((r: any) => ({
+        id: r.id,
+        ubicacion: r.ubicacion,
+        estado: r.activa ? 'activa' : 'inactiva',
+        fechaInstalacion: r.fecha_instalacion,
+        ultimaTemp: r.ultima_temp ? parseFloat(r.ultima_temp) : null,
+        ultimaHumedad: r.ultima_humedad ? parseFloat(r.ultima_humedad) : null,
+        ultimaBiomasa: r.ultima_biomasa ? parseFloat(r.ultima_biomasa) : null,
+      }));
+
+      res.json({ cestas });
+    } catch (err: any) {
+      console.error('[CESTAS] List error:', err.message);
+      res.status(500).json({ error: 'Error al obtener cestas.', code: 'DB_ERROR' });
+    }
+  } else {
+    const cestas = Array.from(cestasEnMemoria.values()).filter(c => c.clienteId === clienteId);
+    res.json({ cestas });
+  }
+});
+
+router.get('/:id', async (req: Request, res: Response) => {
+  const clienteId = (req as any).cliente?.clienteId;
+  const cestaId = req.params.id as string;
+
+  if (isDbConfigured()) {
+    try {
+      const result = await query(
+        `SELECT c.* FROM cestas c WHERE c.id = $1 AND c.cliente_id = $2`,
+        [cestaId, clienteId]
+      );
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: 'Cesta no encontrada.', code: 'CESTA_NOT_FOUND' });
+        return;
+      }
+      res.json({ cesta: result.rows[0] });
+    } catch {
+      res.status(500).json({ error: 'Error al obtener cesta.', code: 'DB_ERROR' });
+    }
+  } else {
+    const cesta = cestasEnMemoria.get(cestaId);
+    if (!cesta || cesta.clienteId !== clienteId) {
+      res.status(404).json({ error: 'Cesta no encontrada.', code: 'CESTA_NOT_FOUND' });
+      return;
+    }
+    res.json({ cesta });
+  }
+});
+
+router.get('/:id/metrics', async (req: Request, res: Response) => {
+  const clienteId = (req as any).cliente?.clienteId;
+  const cestaId = req.params.id;
+  const limit = Math.min(parseInt(String(req.query.limit) || '100'), 1000);
+
+  if (isDbConfigured()) {
+    try {
+      // Verify ownership
+      const ownership = await query(
+        'SELECT id FROM cestas WHERE id = $1 AND cliente_id = $2',
+        [cestaId, clienteId]
+      );
+      if (ownership.rows.length === 0) {
+        res.status(404).json({ error: 'Cesta no encontrada.', code: 'CESTA_NOT_FOUND' });
+        return;
+      }
+
       const result = await query(
         `SELECT * FROM telemetria_cestas
          WHERE cesta_id = $1
          ORDER BY timestamp DESC
          LIMIT $2`,
-        [req.params.id, limit]
+        [cestaId, limit]
       );
-      res.json({
-        cestaId: req.params.id,
-        metrics: result.rows,
-        total: result.rowCount,
-      });
-      return;
-    } catch (err) {
-      console.error('[CESTAS] Error consultando DB:', err);
-      res.status(500).json({ error: 'Error consultando telemetría.', code: 'DB_ERROR' });
-      return;
-    }
-  }
 
-  // Modo demo: datos simulados
-  res.json({
-    cestaId: req.params.id,
-    metrics: [],
-    total: 0,
-    nota: 'Modo demo — sin base de datos configurada.',
-  });
+      res.json({
+        cestaId,
+        total: result.rows.length,
+        metrics: result.rows,
+      });
+    } catch {
+      res.status(500).json({ error: 'Error al obtener telemetría.', code: 'DB_ERROR' });
+    }
+  } else {
+    res.json({ cestaId, total: 0, metrics: [] });
+  }
 });
 
 export default router;

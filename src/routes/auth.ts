@@ -1,5 +1,5 @@
 /**
- * auth.ts — Rutas de autenticación.
+ * auth.ts — Rutas de autenticación con PostgreSQL.
  *
  * POST /api/v1/auth/register — registro de nuevo cliente
  * POST /api/v1/auth/login    — login de cliente existente
@@ -7,21 +7,28 @@
  */
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { generarToken, authenticateToken } from '../middleware/auth';
 import { query, isDbConfigured } from '../db';
 
 const router = Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'biosustain-dev-secret';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 
-// ── Esquemas de validación ────────────────────────────────────────────────────
+// In-memory fallback (only when DB not configured)
+interface MemClient {
+  id: string; nombre: string; email: string; empresa?: string;
+  telefono?: string; passwordHash: string; plan: string; creadoEn: Date;
+}
+const memClients: Map<string, MemClient> = new Map();
+const memByEmail: Map<string, MemClient> = new Map();
 
 const registerSchema = z.object({
-  nombre: z.string().min(2).max(200),
   email: z.string().email(),
-  password: z.string().min(8).max(100),
-  empresa: z.string().optional().default(''),
-  telefono: z.string().max(50).optional().default(''),
-  plan: z.enum(['basico', 'pro', 'enterprise']).default('basico'),
+  password: z.string().min(8),
+  nombre: z.string().min(2),
+  empresa: z.string().optional(),
+  telefono: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -29,144 +36,245 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-// ── Almacenamiento en memoria (modo demo) ────────────────────────────────────
-
-interface Cliente {
-  id: string;
-  nombre: string;
-  email: string;
-  passwordHash: string;
-  empresa: string;
-  telefono: string;
-  plan: string;
-  creadoEn: Date;
-  activo: boolean;
+function genToken(clienteId: string): string {
+  return jwt.sign({ clienteId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN } as any);
 }
 
-const clientesEnMemoria: Map<string, Cliente> = new Map();
-
-// ── Endpoints ─────────────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/auth/register
- * Registra un nuevo cliente.
- */
+// ── REGISTER ──────────────────────────────────────────────────────────
 router.post('/register', async (req: Request, res: Response) => {
-  const parseResult = registerSchema.safeParse(req.body);
-  if (!parseResult.success) {
+  const parse = registerSchema.safeParse(req.body);
+  if (!parse.success) {
     res.status(400).json({
       error: 'Datos de registro inválidos.',
-      detalles: parseResult.error.flatten().fieldErrors,
+      detalles: parse.error.flatten().fieldErrors,
       code: 'VALIDATION_ERROR',
     });
     return;
   }
 
-  const { nombre, email, password, empresa, telefono, plan } = parseResult.data;
-
-  // Verificar si el email ya está registrado
-  const existente = Array.from(clientesEnMemoria.values()).find(c => c.email === email);
-  if (existente) {
-    res.status(409).json({ error: 'Email ya registrado.', code: 'EMAIL_EXISTS' });
-    return;
-  }
-
-  // Hashear contraseña
+  const { email, password, nombre, empresa, telefono } = parse.data;
   const passwordHash = await bcrypt.hash(password, 10);
-  const id = `cli_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  const cliente: Cliente = {
-    id, nombre, email, passwordHash, empresa, telefono, plan,
-    creadoEn: new Date(), activo: true,
-  };
-  clientesEnMemoria.set(id, cliente);
+  if (isDbConfigured()) {
+    try {
+      // Check if email exists
+      const existing = await query('SELECT id FROM clientes WHERE email = $1', [email]);
+      if (existing.rows.length > 0) {
+        res.status(409).json({ error: 'Ya existe un cliente con este email.', code: 'EMAIL_EXISTS' });
+        return;
+      }
 
-  // TODO: Si DB configurada, guardar en PostgreSQL
-  // if (isDbConfigured()) {
-  //   await query('INSERT INTO clientes ...', [id, nombre, email, passwordHash, ...]);
-  // }
+      const clienteId = `cli_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await query(
+        `INSERT INTO clientes (id, nombre, email, empresa, telefono, password_hash, plan)
+         VALUES ($1, $2, $3, $4, $5, $6, 'basico')`,
+        [clienteId, nombre, email, empresa || '', telefono || '', passwordHash]
+      );
 
-  // Generar JWT
-  const token = generarToken({ clienteId: id, email, plan });
+      const token = genToken(clienteId);
+      res.status(201).json({
+        token,
+        cliente: { id: clienteId, nombre, email, empresa: empresa || '', telefono: telefono || '', plan: 'basico' },
+      });
+    } catch (err: any) {
+      console.error('[AUTH] Register error:', err.message);
+      res.status(500).json({ error: 'Error al registrar cliente.', code: 'DB_ERROR' });
+    }
+  } else {
+    // In-memory fallback
+    if (memByEmail.has(email)) {
+      res.status(409).json({ error: 'Ya existe un cliente con este email.', code: 'EMAIL_EXISTS' });
+      return;
+    }
+    const clienteId = `cli_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const client: MemClient = {
+      id: clienteId, nombre, email, empresa, telefono,
+      passwordHash, plan: 'basico', creadoEn: new Date(),
+    };
+    memClients.set(clienteId, client);
+    memByEmail.set(email, client);
 
-  res.status(201).json({
-    token,
-    cliente: {
-      id, nombre, email, empresa, telefono, plan,
-      creadoEn: cliente.creadoEn.toISOString(),
-    },
-  });
-});
-
-/**
- * POST /api/v1/auth/login
- * Autentica un cliente existente.
- */
-router.post('/login', async (req: Request, res: Response) => {
-  const parseResult = loginSchema.safeParse(req.body);
-  if (!parseResult.success) {
-    res.status(400).json({
-      error: 'Credenciales inválidas.',
-      detalles: parseResult.error.flatten().fieldErrors,
-      code: 'VALIDATION_ERROR',
+    const token = genToken(clienteId);
+    res.status(201).json({
+      token,
+      cliente: { id: clienteId, nombre, email, empresa: empresa || '', telefono: telefono || '', plan: 'basico' },
     });
-    return;
   }
-
-  const { email, password } = parseResult.data;
-
-  // Buscar cliente
-  const cliente = Array.from(clientesEnMemoria.values()).find(c => c.email === email);
-  if (!cliente) {
-    res.status(401).json({ error: 'Credenciales inválidas.', code: 'INVALID_CREDENTIALS' });
-    return;
-  }
-
-  // Verificar contraseña
-  const passwordValida = await bcrypt.compare(password, cliente.passwordHash);
-  if (!passwordValida) {
-    res.status(401).json({ error: 'Credenciales inválidas.', code: 'INVALID_CREDENTIALS' });
-    return;
-  }
-
-  if (!cliente.activo) {
-    res.status(403).json({ error: 'Cuenta suspendida. Contacte soporte.', code: 'ACCOUNT_SUSPENDED' });
-    return;
-  }
-
-  const token = generarToken({ clienteId: cliente.id, email: cliente.email, plan: cliente.plan });
-
-  res.json({
-    token,
-    cliente: {
-      id: cliente.id, nombre: cliente.nombre, email: cliente.email,
-      empresa: cliente.empresa, telefono: cliente.telefono, plan: cliente.plan,
-      creadoEn: cliente.creadoEn.toISOString(),
-    },
-  });
 });
 
-/**
- * GET /api/v1/auth/me
- * Devuelve el perfil del cliente autenticado.
- */
-router.get('/me', authenticateToken, (req: Request, res: Response) => {
-  if (!req.cliente) {
+// ── LOGIN ─────────────────────────────────────────────────────────────
+router.post('/login', async (req: Request, res: Response) => {
+  const parse = loginSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: 'Credenciales inválidas.', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  const { email, password } = parse.data;
+
+  if (isDbConfigured()) {
+    try {
+      const result = await query('SELECT * FROM clientes WHERE email = $1', [email]);
+      if (result.rows.length === 0) {
+        res.status(401).json({ error: 'Credenciales inválidas.', code: 'INVALID_CREDENTIALS' });
+        return;
+      }
+
+      const client = result.rows[0];
+      const valid = await bcrypt.compare(password, client.password_hash);
+      if (!valid) {
+        res.status(401).json({ error: 'Credenciales inválidas.', code: 'INVALID_CREDENTIALS' });
+        return;
+      }
+
+      const token = genToken(client.id);
+      res.json({
+        token,
+        cliente: {
+          id: client.id, nombre: client.nombre, email: client.email,
+          empresa: client.empresa || '', telefono: client.telefono || '', plan: client.plan || 'basico',
+        },
+      });
+    } catch (err: any) {
+      console.error('[AUTH] Login error:', err.message);
+      res.status(500).json({ error: 'Error al iniciar sesión.', code: 'DB_ERROR' });
+    }
+  } else {
+    const client = memByEmail.get(email);
+    if (!client) {
+      res.status(401).json({ error: 'Credenciales inválidas.', code: 'INVALID_CREDENTIALS' });
+      return;
+    }
+    const valid = await bcrypt.compare(password, client.passwordHash);
+    if (!valid) {
+      res.status(401).json({ error: 'Credenciales inválidas.', code: 'INVALID_CREDENTIALS' });
+      return;
+    }
+
+    const token = genToken(client.id);
+    res.json({
+      token,
+      cliente: {
+        id: client.id, nombre: client.nombre, email: client.email,
+        empresa: client.empresa || '', telefono: client.telefono || '', plan: client.plan,
+      },
+    });
+  }
+});
+
+// ── ME (GET) + PATCH (update profile) ─────────────────────────────
+router.get('/me', async (req: Request, res: Response) => {
+  const clienteId = (req as any).cliente?.clienteId;
+  if (!clienteId) {
     res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
     return;
   }
 
-  const cliente = clientesEnMemoria.get(req.cliente.clienteId);
-  if (!cliente) {
-    res.status(404).json({ error: 'Cliente no encontrado.', code: 'CLIENT_NOT_FOUND' });
+  if (isDbConfigured()) {
+    try {
+      const result = await query(
+        'SELECT id, nombre, email, empresa, telefono, plan, creado_en FROM clientes WHERE id = $1',
+        [clienteId]
+      );
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: 'Cliente no encontrado.', code: 'NOT_FOUND' });
+        return;
+      }
+      res.json({ cliente: result.rows[0] });
+    } catch {
+      res.status(500).json({ error: 'Error al obtener perfil.', code: 'DB_ERROR' });
+    }
+  } else {
+    const client = memClients.get(clienteId);
+    if (!client) {
+      res.status(404).json({ error: 'Cliente no encontrado.', code: 'NOT_FOUND' });
+      return;
+    }
+    res.json({
+      cliente: {
+        id: client.id, nombre: client.nombre, email: client.email,
+        empresa: client.empresa || '', telefono: client.telefono || '', plan: client.plan,
+      },
+    });
+  }
+});
+
+// ── PATCH ME (update profile) ─────────────────────────────────────
+router.patch('/me', async (req: Request, res: Response) => {
+  const clienteId = (req as any).cliente?.clienteId;
+  if (!clienteId) {
+    res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
     return;
   }
 
-  res.json({
-    id: cliente.id, nombre: cliente.nombre, email: cliente.email,
-    empresa: cliente.empresa, telefono: cliente.telefono, plan: cliente.plan,
-    creadoEn: cliente.creadoEn.toISOString(), activo: cliente.activo,
-  });
+  const { nombre, empresa, telefono } = req.body;
+
+  if (isDbConfigured()) {
+    try {
+      const result = await query(
+        `UPDATE clientes SET nombre = COALESCE($1, nombre), empresa = COALESCE($2, empresa), telefono = COALESCE($3, telefono)
+         WHERE id = $4 RETURNING id, nombre, email, empresa, telefono, plan`,
+        [nombre || null, empresa || null, telefono || null, clienteId]
+      );
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: 'Cliente no encontrado.', code: 'NOT_FOUND' });
+        return;
+      }
+      res.json({ cliente: result.rows[0] });
+    } catch {
+      res.status(500).json({ error: 'Error al actualizar perfil.', code: 'DB_ERROR' });
+    }
+  } else {
+    const client = memClients.get(clienteId);
+    if (!client) { res.status(404).json({ error: 'No encontrado.', code: 'NOT_FOUND' }); return; }
+    if (nombre) client.nombre = nombre;
+    if (empresa !== undefined) client.empresa = empresa;
+    res.json({ cliente: { id: client.id, nombre: client.nombre, email: client.email, empresa: client.empresa, telefono: client.telefono, plan: client.plan } });
+  }
+});
+
+// ── CHANGE PASSWORD ───────────────────────────────────────────────
+router.post('/password', async (req: Request, res: Response) => {
+  const clienteId = (req as any).cliente?.clienteId;
+  if (!clienteId) {
+    res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
+    return;
+  }
+
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword || newPassword.length < 8) {
+    res.status(400).json({ error: 'Contraseña inválida (mín. 8 caracteres).', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  if (isDbConfigured()) {
+    try {
+      const result = await query('SELECT password_hash FROM clientes WHERE id = $1', [clienteId]);
+      if (result.rows.length === 0) {
+        res.status(404).json({ error: 'Cliente no encontrado.', code: 'NOT_FOUND' });
+        return;
+      }
+
+      const valid = await bcrypt.compare(oldPassword, result.rows[0].password_hash);
+      if (!valid) {
+        res.status(401).json({ error: 'Contraseña actual incorrecta.', code: 'INVALID_PASSWORD' });
+        return;
+      }
+
+      const newHash = await bcrypt.hash(newPassword, 10);
+      await query('UPDATE clientes SET password_hash = $1 WHERE id = $2', [newHash, clienteId]);
+      res.json({ success: true, message: 'Contraseña actualizada.' });
+    } catch {
+      res.status(500).json({ error: 'Error al cambiar contraseña.', code: 'DB_ERROR' });
+    }
+  } else {
+    const client = memClients.get(clienteId);
+    if (!client) { res.status(404).json({ error: 'No encontrado.', code: 'NOT_FOUND' }); return; }
+    const valid = await bcrypt.compare(oldPassword, client.passwordHash);
+    if (!valid) { res.status(401).json({ error: 'Contraseña actual incorrecta.', code: 'INVALID_PASSWORD' }); return; }
+    client.passwordHash = await bcrypt.hash(newPassword, 10);
+    res.json({ success: true, message: 'Contraseña actualizada.' });
+  }
 });
 
 export default router;
