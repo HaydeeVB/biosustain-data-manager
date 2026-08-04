@@ -49,11 +49,27 @@ router.get('/', async (req: Request, res: Response) => {
         (c.ultimaHumedad && c.ultimaHumedad < 50)
       ).length;
 
+      // Calculate efficiency from telemetry — cestas within optimal range
+      const cestasOptimasResult = await query(
+        `SELECT COUNT(DISTINCT t.cesta_id) as cestas_optimas
+         FROM telemetria_cestas t
+         JOIN cestas c ON t.cesta_id = c.id
+         WHERE c.cliente_id = $1
+           AND t.timestamp = (
+             SELECT MAX(t2.timestamp) FROM telemetria_cestas t2 WHERE t2.cesta_id = t.cesta_id
+           )
+           AND t.temp_ambiente BETWEEN 25 AND 32
+           AND t.humedad_relativa BETWEEN 50 AND 80`,
+        [clienteId]
+      );
+      const cestasOptimas = parseInt(cestasOptimasResult.rows[0]?.cestas_optimas || 0);
+      const eficiencia = cestasActivas > 0 ? Math.round((cestasOptimas / cestasActivas) * 100) : 0;
+
       res.json({
         cestasActivas,
         totalCestas: cestas.length,
         alertas,
-        eficiencia: 99,
+        eficiencia,
         cestas,
       });
     } catch (err: any) {
@@ -65,7 +81,7 @@ router.get('/', async (req: Request, res: Response) => {
       cestasActivas: 0,
       totalCestas: 0,
       alertas: 0,
-      eficiencia: 99,
+      eficiencia: 0,
       cestas: [],
     });
   }

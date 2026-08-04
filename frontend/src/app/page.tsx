@@ -47,7 +47,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const saved = localStorage.getItem('biosustain_token');
-    if (saved) { setToken(saved); setView('dashboard'); loadDashboard(saved); }
+    if (saved) {
+      setToken(saved);
+      setView('dashboard');
+      loadDashboard(saved).catch(() => {
+        // Token expired or invalid — clear and return to login
+        localStorage.removeItem('biosustain_token');
+        setToken(null);
+        setView('login');
+      });
+    }
   }, []);
 
   const loadDashboard = async (t: string) => {
