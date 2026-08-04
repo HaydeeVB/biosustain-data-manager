@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const [plans, setPlans] = useState<any>(null);
   const [subscription, setSubscription] = useState<any>(null);
   const [lotes, setLotes] = useState<any[]>([]);
+  const [sparklines, setSparklines] = useState<Record<string, { temp: number[]; humedad: number[]; biomasa: number[] }>>({});
   const [cliente, setCliente] = useState<any>(null);
   const [tab, setTab] = useState<'resumen' | 'cestas' | 'lotes' | 'esg' | 'facturacion' | 'ajustes'>('resumen');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -66,6 +67,8 @@ export default function DashboardPage() {
       if (subRes.ok) setSubscription(await subRes.json());
       const lotesRes = await fetch(`${API_URL}/api/v1/lotes`, { headers: h });
       if (lotesRes.ok) { const lData = await lotesRes.json(); setLotes(lData.lotes || []); }
+      const sparkRes = await fetch(`${API_URL}/api/v1/cestas/sparklines/all`, { headers: h });
+      if (sparkRes.ok) { const sparkData = await sparkRes.json(); setSparklines(sparkData.sparklines || {}); }
     } catch (e) { console.error('Load error:', e); }
   };
 
@@ -143,8 +146,8 @@ export default function DashboardPage() {
               </p>
               <div style={{ display: 'flex', gap: 20, marginTop: 20 }}>
                 <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>8</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Cestas</div></div>
-                <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>99%</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Eficiencia</div></div>
-                <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>18.6t</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>CO₂e</div></div>
+                <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>—</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Eficiencia</div></div>
+                <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>—</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>CO₂e</div></div>
               </div>
             </div>
           </div>
@@ -313,7 +316,7 @@ export default function DashboardPage() {
             <div className="kpi-grid" style={{ display: 'grid', gap: 16, marginBottom: 32 }}>
               <KpiCard icon="📦" label="Cestas activas" value={dashboard.cestasActivas ?? 0} sub={`${dashboard.totalCestas ?? 0} total`} />
               <KpiCard icon="⚠️" label="Alertas" value={dashboard.alertas ?? 0} color={dashboard.alertas > 0 ? C.warn : C.green} sub={dashboard.alertas > 0 ? 'Requiere atención' : 'Todo en orden'} />
-              <KpiCard icon="⚙️" label="Eficiencia" value={`${dashboard.eficiencia ?? 99}%`} color={C.green} sub="Promedio del sistema" />
+              <KpiCard icon="⚙️" label="Eficiencia" value={`${dashboard.eficiencia ?? 0}%`} color={C.green} sub="Promedio del sistema" />
               <KpiCard icon="🌱" label="Lotes activos" value={lotes.length} color={C.green} sub={`${lotes.reduce((s, l) => s + (l.pesoKg || 0), 0).toFixed(0)} kg procesados`} />
             </div>
 
@@ -323,7 +326,7 @@ export default function DashboardPage() {
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16, fontFamily: C.fontDisplay }}>Cestas recientes</h3>
                 <div className="cesta-grid" style={{ display: 'grid', gap: 14 }}>
                   {dashboard.cestas.slice(0, 6).map((c: any) => (
-                    <CestaCard key={c.id} cesta={c} />
+                    <CestaCard key={c.id} cesta={c} sparkline={sparklines[c.id]} />
                   ))}
                 </div>
               </div>
@@ -341,7 +344,7 @@ export default function DashboardPage() {
             {dashboard.cestas?.length > 0 ? (
               <div className="cesta-grid" style={{ display: 'grid', gap: 16 }}>
                 {dashboard.cestas.map((c: any) => (
-                  <CestaCard key={c.id} cesta={c} detailed />
+                  <CestaCard key={c.id} cesta={c} detailed sparkline={sparklines[c.id]} />
                 ))}
               </div>
             ) : (
@@ -384,10 +387,10 @@ export default function DashboardPage() {
         {tab === 'esg' && esg && (
           <div className="animate-in">
             <div className="kpi-grid" style={{ display: 'grid', gap: 16, marginBottom: 24 }}>
-              <KpiCard icon="♻️" label="Residuos reconvertidos" value={`${(esg.residuosReconvertidos ?? 12.45).toFixed(2)} t`} color={C.green} sub="Total acumulado" />
-              <KpiCard icon="🌾" label="Frass certificado" value={`${(esg.frassCertificado ?? 4.18).toFixed(2)} t`} color={C.green} sub="Biofertilizer producido" />
-              <KpiCard icon="🌍" label="CO₂e reducido" value={`${(esg.co2eReducido ?? 18.62).toFixed(2)} t`} color={C.green} sub="GEI mitigado" />
-              <KpiCard icon="💨" label="Metano evitado" value={`${((esg.residuosReconvertidos ?? 12.45) * 0.15).toFixed(2)} t`} color={C.green} sub="CH₄ no emitido" />
+              <KpiCard icon="♻️" label="Residuos reconvertidos" value={`${(esg.residuosReconvertidos ?? 0).toFixed(2)} t`} color={C.green} sub="Total acumulado" />
+              <KpiCard icon="🌾" label="Frass certificado" value={`${(esg.frassCertificado ?? 0).toFixed(2)} t`} color={C.green} sub="Biofertilizer producido" />
+              <KpiCard icon="🌍" label="CO₂e reducido" value={`${(esg.co2eReducido ?? 0).toFixed(2)} t`} color={C.green} sub="GEI mitigado" />
+              <KpiCard icon="💨" label="Metano evitado" value={`${(esg.metanoEvitado ?? 0).toFixed(2)} t`} color={C.green} sub="CH₄ no emitido" />
             </div>
             <div style={{
               background: C.card, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`,
@@ -527,7 +530,28 @@ function KpiCard({ icon, label, value, color = '#e8e8e8', sub }: {
   );
 }
 
-function CestaCard({ cesta, detailed = false }: { cesta: any; detailed?: boolean }) {
+function Sparkline({ data, color, width = 100, height = 24 }: { data: number[]; color: string; width?: number; height?: number }) {
+  if (!data || data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - ((v - min) / range) * height;
+    return `${x},${y}`;
+  }).join(' ');
+  const lastVal = data[data.length - 1];
+  const lastX = width;
+  const lastY = height - ((lastVal - min) / range) * height;
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lastX} cy={lastY} r={2} fill={color} />
+    </svg>
+  );
+}
+
+function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detailed?: boolean; sparkline?: { temp: number[]; humedad: number[]; biomasa: number[] } }) {
   const temp = cesta.ultimaTemp;
   const hum = cesta.ultimaHumedad;
   const hasAlert = (temp && temp > 32) || (hum && hum < 50);
@@ -560,6 +584,28 @@ function CestaCard({ cesta, detailed = false }: { cesta: any; detailed?: boolean
             <div>
               <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>Biomasa</div>
               <div style={{ fontWeight: 600, color: '#3eb002' }}>{cesta.ultimaBiomasa.toFixed(1)} kg</div>
+            </div>
+          )}
+        </div>
+      )}
+      {sparkline && (sparkline.temp.length > 1 || sparkline.humedad.length > 1) && (
+        <div style={{ display: 'flex', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid #1a2515' }}>
+          {sparkline.temp.length > 1 && (
+            <div>
+              <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>Temp</div>
+              <Sparkline data={sparkline.temp} color={temp > 32 ? '#e8a000' : '#3eb002'} width={80} height={20} />
+            </div>
+          )}
+          {sparkline.humedad.length > 1 && (
+            <div>
+              <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>Humedad</div>
+              <Sparkline data={sparkline.humedad} color={hum < 50 ? '#e8a000' : '#3eb002'} width={80} height={20} />
+            </div>
+          )}
+          {detailed && sparkline.biomasa.length > 1 && (
+            <div>
+              <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>Biomasa</div>
+              <Sparkline data={sparkline.biomasa} color="#3eb002" width={80} height={20} />
             </div>
           )}
         </div>

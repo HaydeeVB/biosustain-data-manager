@@ -123,4 +123,49 @@ router.get('/:id/metrics', async (req: Request, res: Response) => {
   }
 });
 
+// Batch sparkline data — last 20 readings per cesta (for dashboard cards)
+router.get('/sparklines/all', async (req: Request, res: Response) => {
+  const clienteId = (req as any).cliente?.clienteId;
+  if (!clienteId) {
+    res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
+    return;
+  }
+
+  if (!isDbConfigured()) {
+    res.json({ sparklines: {} });
+    return;
+  }
+
+  try {
+    const cestasResult = await query(
+      'SELECT id FROM cestas WHERE cliente_id = $1',
+      [clienteId]
+    );
+
+    const sparklines: Record<string, { temp: number[]; humedad: number[]; biomasa: number[] }> = {};
+
+    for (const cesta of cestasResult.rows) {
+      const result = await query(
+        `SELECT temp_ambiente, humedad_relativa, biomasa_larvaria_estimada_kg
+         FROM telemetria_cestas
+         WHERE cesta_id = $1
+         ORDER BY timestamp DESC
+         LIMIT 20`,
+        [cesta.id]
+      );
+      // Reverse so oldest is first (left to right)
+      const rows = result.rows.reverse();
+      sparklines[cesta.id] = {
+        temp: rows.map((r: any) => parseFloat(r.temp_ambiente || 0)),
+        humedad: rows.map((r: any) => parseFloat(r.humedad_relativa || 0)),
+        biomasa: rows.map((r: any) => parseFloat(r.biomasa_larvaria_estimada_kg || 0)),
+      };
+    }
+
+    res.json({ sparklines });
+  } catch {
+    res.status(500).json({ error: 'Error al obtener sparklines.', code: 'DB_ERROR' });
+  }
+});
+
 export default router;

@@ -30,6 +30,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
 
 // ── Middlewares de seguridad ──────────────────────────────────────────────────
@@ -74,6 +75,7 @@ app.get('/api/v1/health', (_req: Request, res: Response) => {
 
 // Auth routes
 import authRoutes from './routes/auth';
+// Auth routes: /register and /login are public, /me and /password need auth
 app.use('/api/v1/auth', authRoutes);
 
 // NDA (click-wrap)

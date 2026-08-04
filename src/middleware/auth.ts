@@ -8,7 +8,11 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const JWT_SECRET = process.env.JWT_SECRET || '';
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET no está configurado. El servidor no puede arrancar sin un secret.');
+  process.exit(1);
+}
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 
 export interface ClientePayload {
@@ -63,8 +67,8 @@ export function authenticateApiKey(req: Request, res: Response, next: NextFuncti
   const expectedKey = process.env.IOT_API_KEY || '';
 
   if (!expectedKey) {
-    // Modo desarrollo: sin API key (solo localhost)
-    next();
+    // Fail closed — no open access without a configured key
+    res.status(503).json({ error: 'Servicio IoT no configurado. Contacte al administrador.', code: 'IOT_NOT_CONFIGURED' });
     return;
   }
 

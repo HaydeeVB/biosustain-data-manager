@@ -8,11 +8,16 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { authenticateToken } from '../middleware/auth';
 import { z } from 'zod';
 import { query, isDbConfigured } from '../db';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'biosustain-dev-secret';
+const JWT_SECRET = process.env.JWT_SECRET || '';
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET no está configurado.');
+  process.exit(1);
+}
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 
 // In-memory fallback (only when DB not configured)
@@ -163,7 +168,7 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 // ── ME (GET) + PATCH (update profile) ─────────────────────────────
-router.get('/me', async (req: Request, res: Response) => {
+router.get('/me', authenticateToken, async (req: Request, res: Response) => {
   const clienteId = (req as any).cliente?.clienteId;
   if (!clienteId) {
     res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
@@ -200,7 +205,7 @@ router.get('/me', async (req: Request, res: Response) => {
 });
 
 // ── PATCH ME (update profile) ─────────────────────────────────────
-router.patch('/me', async (req: Request, res: Response) => {
+router.patch('/me', authenticateToken, async (req: Request, res: Response) => {
   const clienteId = (req as any).cliente?.clienteId;
   if (!clienteId) {
     res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
@@ -234,7 +239,7 @@ router.patch('/me', async (req: Request, res: Response) => {
 });
 
 // ── CHANGE PASSWORD ───────────────────────────────────────────────
-router.post('/password', async (req: Request, res: Response) => {
+router.post('/password', authenticateToken, async (req: Request, res: Response) => {
   const clienteId = (req as any).cliente?.clienteId;
   if (!clienteId) {
     res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
