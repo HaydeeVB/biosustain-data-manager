@@ -75,8 +75,43 @@ app.get('/api/v1/health', (_req: Request, res: Response) => {
 
 // Auth routes
 import authRoutes from './routes/auth';
+import { initDb, query, isDbConfigured } from './db';
+
+// Initialize database connection
+initDb();
+
 // Auth routes: /register and /login are public, /me and /password need auth
 app.use('/api/v1/auth', authRoutes);
+
+// Public stats (for login screen — no auth required)
+app.get('/api/v1/public/stats', async (_req: any, res: any) => {
+  try {
+    if (!isDbConfigured()) {
+      res.json({ cestas: 0, eficiencia: 0, co2e: 0 });
+      return;
+    }
+    const cestasResult = await query('SELECT COUNT(*) as total FROM cestas WHERE activa = true');
+    const cestas = parseInt(cestasResult.rows[0]?.total || 0);
+
+    const lotesResult = await query(`SELECT COALESCE(SUM(co2e_reducido_kg), 0) as co2e FROM lotes WHERE estado = 'activo'`);
+    const co2eKg = parseFloat(lotesResult.rows[0]?.co2e || 0);
+
+    const optimasResult = await query(
+      `SELECT COUNT(DISTINCT t.cesta_id) as optimas
+       FROM telemetria_cestas t
+       WHERE t.timestamp = (SELECT MAX(t2.timestamp) FROM telemetria_cestas t2 WHERE t2.cesta_id = t.cesta_id)
+         AND t.temp_ambiente BETWEEN 25 AND 32
+         AND t.humedad_relativa BETWEEN 50 AND 80`
+    );
+    const optimas = parseInt(optimasResult.rows[0]?.optimas || 0);
+    const eficiencia = cestas > 0 ? Math.round((optimas / cestas) * 100) : 0;
+
+    res.json({ cestas, eficiencia, co2e: co2eKg / 1000 });
+  } catch (e: any) {
+    console.error('[PUBLIC STATS] Error:', e.message);
+    res.json({ cestas: 0, eficiencia: 0, co2e: 0, error: e.message });
+  }
+});
 
 // NDA (click-wrap)
 import ndaRoutes from './routes/nda';
@@ -84,10 +119,6 @@ app.use('/api/v1/nda', ndaRoutes);
 
 // Protected routes (require JWT)
 import { authenticateToken } from './middleware/auth';
-import { initDb } from './db';
-
-// Initialize database connection
-initDb();
 import { auditLog } from './middleware/audit';
 
 // Cestas (multi-tenant — cada cliente ve solo las suyas)

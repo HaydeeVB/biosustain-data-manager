@@ -41,11 +41,14 @@ export default function DashboardPage() {
   const [subscription, setSubscription] = useState<any>(null);
   const [lotes, setLotes] = useState<any[]>([]);
   const [sparklines, setSparklines] = useState<Record<string, { temp: number[]; humedad: number[]; biomasa: number[] }>>({});
+  const [publicStats, setPublicStats] = useState({ cestas: 0, eficiencia: 0, co2e: 0 });
   const [cliente, setCliente] = useState<any>(null);
   const [tab, setTab] = useState<'resumen' | 'cestas' | 'lotes' | 'esg' | 'facturacion' | 'ajustes'>('resumen');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
+    // Fetch public stats for login screen
+    fetch(`${API_URL}/api/v1/public/stats`).then(r => r.json()).then(d => setPublicStats(d)).catch(() => {});
     const saved = localStorage.getItem('biosustain_token');
     if (saved) {
       setToken(saved);
@@ -154,9 +157,9 @@ export default function DashboardPage() {
                 Monitoreo en tiempo real, proyección de biomasa y reportes ESG certificados.
               </p>
               <div style={{ display: 'flex', gap: 20, marginTop: 20 }}>
-                <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>8</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Cestas</div></div>
-                <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>—</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Eficiencia</div></div>
-                <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>—</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>CO₂e</div></div>
+                <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>{publicStats.cestas}</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Cestas</div></div>
+                <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>{publicStats.eficiencia}%</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Eficiencia</div></div>
+                <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>{publicStats.co2e.toFixed(2)}t</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>CO₂e</div></div>
               </div>
             </div>
           </div>
