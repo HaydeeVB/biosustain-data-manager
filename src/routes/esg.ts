@@ -23,9 +23,10 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   try {
-    // Calcular desde lotes reales
+    // Calcular desde lotes reales (cada lote ya lleva sus factores por categoría
+    // aplicados al registrarse: biomasa_estimada, co2e_reducido, metano_evitado).
     const lotesResult = await query(
-      `SELECT peso_kg, biomasa_estimada_kg, co2e_reducido_kg
+      `SELECT peso_kg, biomasa_estimada_kg, co2e_reducido_kg, metano_evitado_kg, categoria
        FROM lotes WHERE cliente_id = $1 AND estado = 'activo'`,
       [clienteId]
     );
@@ -34,8 +35,14 @@ router.get('/', async (req: Request, res: Response) => {
     const totalResiduosKg = lotes.reduce((sum: number, l: any) => sum + parseFloat(l.peso_kg || 0), 0);
     const totalBiomasaKg = lotes.reduce((sum: number, l: any) => sum + parseFloat(l.biomasa_estimada_kg || 0), 0);
     const totalCo2eKg = lotes.reduce((sum: number, l: any) => sum + parseFloat(l.co2e_reducido_kg || 0), 0);
-    const frassKg = totalBiomasaKg * 0.4; // 40% de biomasa → frass
-    const metanoKg = totalResiduosKg * 0.15;
+    // Methane is now category-specific (stored at registration). Fall back to the
+    // legacy approximation only for pre-category lots that have no metano_evitado.
+    const totalMetanoKg = lotes.reduce((sum: number, l: any) => {
+      const stored = parseFloat(l.metano_evitado_kg);
+      if (stored > 0) return sum + stored;
+      return sum + parseFloat(l.peso_kg || 0) * 0.15; // legacy estimate for old lots
+    }, 0);
+    const frassKg = totalBiomasaKg * 0.4; // 40% de biomasa → frass/compos
 
     // Telemetría para eficiencia
     const telemetryResult = await query(
@@ -81,7 +88,7 @@ router.get('/', async (req: Request, res: Response) => {
       residuosReconvertidos: ton(totalResiduosKg),
       frassCertificado: ton(frassKg),
       co2eReducido: ton(totalCo2eKg),
-      metanoEvitado: ton(metanoKg),
+      metanoEvitado: ton(totalMetanoKg),
       biomasaProducida: ton(totalBiomasaKg),
       eficiencia: eficiencia,
       totalLotes: lotes.length,

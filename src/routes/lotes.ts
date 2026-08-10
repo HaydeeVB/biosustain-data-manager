@@ -12,15 +12,32 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { query, isDbConfigured } from '../db';
+import { getCategoria, CATEGORIAS, type CategoriaId, type Categoria } from '../lib/categorias';
 
 const router = Router();
 
+// Category-aware lot schema. `categoria` drives dynamic units, params, and ESG calcs.
 const loteSchema = z.object({
-  cestaId: z.string().min(1),
+  cestaId: z.string().min(1).optional(),   // optional: BSF legacy nests under cestas
+  categoria: z.enum(['palma','ganado','platano','bsf']).default('bsf'),
   tipoResiduo: z.string().min(2),
   pesoKg: z.number().positive(),
+  unidadPrincipal: z.string().optional(),
   tipoSustrato: z.string().optional().default('Diana (36% verde)'),
+  residuoTipo: z.string().optional(),
 });
+
+/** Apply category-specific ESG + projection factors to a lot. */
+function calcForCategoria(cat: Categoria, pesoKg: number) {
+  const e = cat.esg;
+  return {
+    biomasaEstimada: +(pesoKg * e.biomassFactor).toFixed(2),
+    co2eReducido: +(pesoKg * e.co2eFactor).toFixed(2),
+    metanoEvitado: +(pesoKg * e.methaneFactor).toFixed(2),
+    frassEstimado: +(pesoKg * e.biomassFactor * 0.4).toFixed(2),
+    fechaCosecha: new Date(Date.now() + e.harvestDays * 24 * 60 * 60 * 1000),
+  };
+}
 
 // ── POST: Register a new lote ──────────────────────────────────────
 router.post('/', async (req: Request, res: Response) => {
@@ -40,7 +57,7 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const { cestaId, tipoResiduo, pesoKg, tipoSustrato } = parse.data;
+  const { cestaId, categoria, tipoResiduo, pesoKg, unidadPrincipal, tipoSustrato, residuoTipo } = parse.data;
 
   if (!isDbConfigured()) {
     res.status(503).json({ error: 'Base de datos no configurada.', code: 'DB_ERROR' });
@@ -48,41 +65,51 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   try {
-    // Verify cesta belongs to client
-    const cestaCheck = await query(
-      'SELECT id FROM cestas WHERE id = $1 AND cliente_id = $2',
-      [cestaId, clienteId]
-    );
-    if (cestaCheck.rows.length === 0) {
-      res.status(404).json({ error: 'Cesta no encontrada.', code: 'CESTA_NOT_FOUND' });
-      return;
+    // Non-larval categories don't hang off a cesta; BSF legacy does.
+    // Verify cesta belongs to client when one is provided.
+    if (cestaId) {
+      const cestaCheck = await query(
+        'SELECT id FROM cestas WHERE id = $1 AND cliente_id = $2',
+        [cestaId, clienteId]
+      );
+      if (cestaCheck.rows.length === 0) {
+        res.status(404).json({ error: 'Cesta no encontrada.', code: 'CESTA_NOT_FOUND' });
+        return;
+      }
     }
 
+    const cat = getCategoria(categoria);
+    const calc = calcForCategoria(cat, pesoKg);
     const loteId = `lote_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-
-    // Verhulst projection: ~14 day cycle, biomass ≈ peso * 0.18 (FCR)
-    // CO2e: each kg of waste avoids ~0.5 kg CO2e from landfill methane
-    const biomasaEstimada = +(pesoKg * 0.18).toFixed(2);
-    const co2eReducido = +(pesoKg * 0.5).toFixed(2);
-    const fechaCosecha = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
+    const unidad = unidadPrincipal || cat.defaultUnit;
 
     await query(
-      `INSERT INTO lotes (id, cliente_id, cesta_id, tipo_residuo, peso_kg, tipo_sustrato, fecha_proyeccion_cosecha, biomasa_estimada_kg, co2e_reducido_kg, estado)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'activo')`,
-      [loteId, clienteId, cestaId, tipoResiduo, pesoKg, tipoSustrato, fechaCosecha, biomasaEstimada, co2eReducido]
+      `INSERT INTO lotes
+        (id, cliente_id, cesta_id, categoria, tipo_residuo, peso_kg, unidad_principal, tipo_sustrato, residuo_tipo,
+         fecha_proyeccion_cosecha, biomasa_estimada_kg, co2e_reducido_kg, metano_evitado_kg, frass_estimado_kg, estado, categoria_config)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'activo', $15::jsonb)`,
+      [loteId, clienteId, cestaId || null, categoria, tipoResiduo, pesoKg, unidad, tipoSustrato, residuoTipo || tipoResiduo,
+       calc.fechaCosecha, calc.biomasaEstimada, calc.co2eReducido, calc.metanoEvitado, calc.frassEstimado,
+       JSON.stringify({ cesta: cestaId || null, unidad, monitoring: cat.monitored.map(m => m.key), factors: cat.esg })]
     );
 
     res.status(201).json({
       lote: {
         id: loteId,
-        cestaId,
+        categoria,
+        cestaId: cestaId || null,
         tipoResiduo,
         pesoKg,
+        unidadPrincipal: unidad,
         tipoSustrato,
+        residuoTipo: residuoTipo || tipoResiduo,
         fechaIngreso: new Date().toISOString(),
-        fechaProyeccionCosecha: fechaCosecha.toISOString(),
-        biomasaEstimadaKg: biomasaEstimada,
-        co2eReducidoKg: co2eReducido,
+        fechaProyeccionCosecha: calc.fechaCosecha.toISOString(),
+        biomasaEstimadaKg: calc.biomasaEstimada,
+        co2eReducidoKg: calc.co2eReducido,
+        metanoEvitadoKg: calc.metanoEvitado,
+        frassEstimadoKg: calc.frassEstimado,
+        monitoringParams: cat.monitored.map(m => ({ key: m.key, label: m.label, unit: m.unit })),
         estado: 'activo',
       },
     });
@@ -90,6 +117,23 @@ router.post('/', async (req: Request, res: Response) => {
     console.error('[LOTES] Create error:', err.message);
     res.status(500).json({ error: 'Error al registrar lote.', code: 'DB_ERROR' });
   }
+});
+
+// ── GET: Category config (drives dynamic units/params/thresholds in the UI) ──
+router.get('/categorias', async (_req: Request, res: Response) => {
+  res.json({
+    categorias: Object.values(CATEGORIAS).map((c) => ({
+      id: c.id,
+      nombre: c.nombre,
+      nombreEn: c.nombreEn,
+      icon: c.icon,
+      wasteInputs: c.wasteInputs,
+      primaryUnits: c.primaryUnits,
+      defaultUnit: c.defaultUnit,
+      monitored: c.monitored.map((m) => ({ key: m.key, label: m.label, unit: m.unit, optimalMin: m.optimalMin, optimalMax: m.optimalMax, warningMax: m.warningMax })),
+      esg: c.esg,
+    })),
+  });
 });
 
 // ── GET: List lotes ─────────────────────────────────────────────────
@@ -117,15 +161,20 @@ router.get('/', async (req: Request, res: Response) => {
 
     const lotes = result.rows.map((r: any) => ({
       id: r.id,
+      categoria: r.categoria || 'bsf',
       cestaId: r.cesta_id,
       cestaUbicacion: r.cesta_ubicacion,
       tipoResiduo: r.tipo_residuo,
       pesoKg: parseFloat(r.peso_kg),
+      unidadPrincipal: r.unidad_principal,
       tipoSustrato: r.tipo_sustrato,
+      residuoTipo: r.residuo_tipo,
       fechaIngreso: r.fecha_ingreso,
       fechaProyeccionCosecha: r.fecha_proyeccion_cosecha,
       biomasaEstimadaKg: parseFloat(r.biomasa_estimada_kg),
       co2eReducidoKg: parseFloat(r.co2e_reducido_kg),
+      metanoEvitadoKg: parseFloat(r.metano_evitado_kg),
+      frassEstimadoKg: parseFloat(r.frass_estimado_kg),
       estado: r.estado,
     }));
 

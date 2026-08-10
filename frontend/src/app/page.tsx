@@ -653,13 +653,26 @@ function LoteCard({ lote }: { lote: any }) {
 }
 
 function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] }) {
+  const [categoria, setCategoria] = useState('palma');
+  const [categorias, setCategorias] = useState<any[]>([]);
   const [tipoResiduo, setTipoResiduo] = useState('');
   const [pesoKg, setPesoKg] = useState('');
+  const [unidad, setUnidad] = useState('');
   const [cestaId, setCestaId] = useState('');
   const [tipoSustrato, setTipoSustrato] = useState('Diana (36% verde)');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Load category config from backend (dynamic waste inputs, units, params)
+  useEffect(() => {
+    fetch(`${API_URL}/api/v1/lotes/categorias`)
+      .then((r) => r.json())
+      .then((j) => { if (j?.categorias) setCategorias(j.categorias); })
+      .catch(() => {});
+  }, []);
+
+  const activeCat = categorias.find((c) => c.id === categoria);
 
   const handleSubmit = async () => {
     setLoading(true); setError(''); setSuccess('');
@@ -667,11 +680,19 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
       const token = localStorage.getItem('biosustain_token');
       const res = await fetch(`${API_URL}/api/v1/lotes`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ cestaId, tipoResiduo, pesoKg: parseFloat(pesoKg), tipoSustrato }),
+        body: JSON.stringify({
+          categoria,
+          cestaId: categoria === 'bsf' ? cestaId : undefined, // cestas only for BSF
+          tipoResiduo,
+          pesoKg: parseFloat(pesoKg),
+          unidadPrincipal: unidad || undefined,
+          tipoSustrato,
+          residuoTipo: tipoResiduo,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
-        setSuccess(`Lote registrado: ${data.lote.biomasaEstimadaKg} kg biomasa, ${data.lote.co2eReducidoKg} kg CO₂e reducido`);
+        setSuccess(`Lote registrado: ${data.lote.biomasaEstimadaKg} kg biomasa, ${data.lote.co2eReducidoKg} kg CO₂e, ${data.lote.metanoEvitadoKg} kg CH₄ evitado`);
         setTipoResiduo(''); setPesoKg(''); onCreated();
       } else { setError(data.error || 'Error al registrar lote'); }
     } catch { setError('No se pudo conectar al servidor'); }
@@ -683,38 +704,94 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
       background: '#0c120c', borderRadius: 16, padding: 24, border: '1px solid #1a2515',
     }}>
       <h3 style={{ fontSize: 16, fontWeight: 700, color: '#e8e8e8', marginBottom: 4, fontFamily: "'Space Grotesk', sans-serif" }}>Registrar nuevo lote</h3>
-      <p style={{ fontSize: 13, color: '#9a9a9a', marginBottom: 20 }}>Ingresa los datos de tus residuos orgánicos. El sistema calcula proyección de cosecha, biomasa y CO₂e.</p>
+      <p style={{ fontSize: 13, color: '#9a9a9a', marginBottom: 20 }}>Selecciona la categoría de tu operación. El sistema ajusta unidades, parámetros y cálculo de CO₂e según el tipo de bioconversión.</p>
+
+      {/* Category selection step */}
+      <div style={{ marginBottom: 20 }}>
+        <label style={labelStyle}>Categoría de operación</label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginTop: 8 }}>
+          {categorias.length ? categorias.map((c) => (
+            <div
+              key={c.id}
+              onClick={() => { setCategoria(c.id); setTipoResiduo(''); setUnidad(c.defaultUnit); setCestaId(''); }}
+              style={{
+                padding: '12px 8px', borderRadius: 12, cursor: 'pointer', textAlign: 'center',
+                border: `1.5px solid ${categoria === c.id ? '#3eb002' : '#1a2515'}`,
+                background: categoria === c.id ? 'rgba(62,176,2,0.12)' : 'transparent',
+                transition: 'all .15s',
+              }}
+            >
+              <div style={{ fontSize: 22 }}>{c.icon}</div>
+              <div style={{ fontSize: 11, color: '#e8e8e8', fontWeight: 600, marginTop: 4 }}>{c.nombre}</div>
+              {categoria === c.id && <div style={{ fontSize: 10, color: '#3eb002', marginTop: 2 }}>Seleccionada</div>}
+            </div>
+          )) : (
+            <div style={{ fontSize: 12, color: '#555', gridColumn: '1/-1' }}>Cargando categorías…</div>
+          )}
+        </div>
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div>
-          <label style={labelStyle}>Cesta</label>
-          <select value={cestaId} onChange={e => setCestaId(e.target.value)} style={inputStyle}>
-            <option value="">Selecciona...</option>
-            {cestas.map((c: any) => <option key={c.id} value={c.id}>{c.id} — {c.ubicacion || ''}</option>)}
-          </select>
-        </div>
+        {categoria === 'bsf' ? (
+          <div>
+            <label style={labelStyle}>Cesta</label>
+            <select value={cestaId} onChange={e => setCestaId(e.target.value)} style={inputStyle}>
+              <option value="">Selecciona...</option>
+              {cestas.map((c: any) => <option key={c.id} value={c.id}>{c.id} — {c.ubicacion || ''}</option>)}
+            </select>
+          </div>
+        ) : (
+          <div>
+            <label style={labelStyle}>Unidad principal</label>
+            <select value={unidad} onChange={e => setUnidad(e.target.value)} style={inputStyle}>
+              {(activeCat?.primaryUnits || []).map((u: string) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label style={labelStyle}>Peso (kg)</label>
           <input type="number" value={pesoKg} onChange={e => setPesoKg(e.target.value)} placeholder="Ej. 250" style={inputStyle} />
         </div>
         <div>
           <label style={labelStyle}>Tipo de residuo</label>
-          <input value={tipoResiduo} onChange={e => setTipoResiduo(e.target.value)} placeholder="Ej. Residuos orgánicos municipales" style={inputStyle} />
+          {activeCat?.wasteInputs?.length ? (
+            <select value={tipoResiduo} onChange={e => setTipoResiduo(e.target.value)} style={inputStyle}>
+              <option value="">Selecciona un residuo…</option>
+              {activeCat.wasteInputs.map((w: string) => <option key={w} value={w}>{w}</option>)}
+            </select>
+          ) : (
+            <input value={tipoResiduo} onChange={e => setTipoResiduo(e.target.value)} placeholder="Tipo de residuo" style={inputStyle} />
+          )}
         </div>
-        <div>
-          <label style={labelStyle}>Sustrato</label>
-          <select value={tipoSustrato} onChange={e => setTipoSustrato(e.target.value)} style={inputStyle}>
-            <option>Diana (36% verde)</option>
-            <option>Fibroso (60% verde)</option>
-            <option>Rico (15% verde)</option>
-          </select>
-        </div>
+        {categoria === 'bsf' && (
+          <div>
+            <label style={labelStyle}>Sustrato</label>
+            <select value={tipoSustrato} onChange={e => setTipoSustrato(e.target.value)} style={inputStyle}>
+              <option>Diana (36% verde)</option>
+              <option>Fibroso (60% verde)</option>
+              <option>Rico (15% verde)</option>
+            </select>
+          </div>
+        )}
+        {/* Show category-specific monitored parameters as info (thresholds drive UI) */}
+        {activeCat?.monitored?.length ? (
+          <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+            <label style={labelStyle}>Parámetros monitoreados ({activeCat.nombre})</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+              {activeCat.monitored.map((m: any) => (
+                <div key={m.key} style={{ fontSize: 11, color: '#9a9a9a', background: '#0f1a0f', padding: '6px 12px', borderRadius: 20, border: '1px solid #1a2515' }}>
+                  {m.label} · óptimo {m.optimalMin}–{m.optimalMax} {m.unit}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {error && <div style={errorStyle}>⚠️ {error}</div>}
       {success && <div style={successStyle}>✓ {success}</div>}
 
-      <button onClick={handleSubmit} disabled={loading || !tipoResiduo || !pesoKg || !cestaId} style={{
+      <button onClick={handleSubmit} disabled={loading || !tipoResiduo || !pesoKg || (categoria === 'bsf' && !cestaId)} style={{
         padding: '12px 28px', borderRadius: 12, border: 'none', cursor: loading ? 'wait' : 'pointer',
         background: '#3eb002', color: '#060a06', fontSize: 14, fontWeight: 700, fontFamily: "'Inter', sans-serif",
         marginTop: 16, boxShadow: '0 4px 14px rgba(62,176,2,0.25)', opacity: loading ? 0.6 : 1,
