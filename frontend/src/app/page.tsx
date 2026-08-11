@@ -43,6 +43,7 @@ export default function DashboardPage() {
   const [sparklines, setSparklines] = useState<Record<string, { temp: number[]; humedad: number[]; biomasa: number[] }>>({});
   const [publicStats, setPublicStats] = useState({ cestas: 0, eficiencia: 0, co2e: 0 });
   const [cliente, setCliente] = useState<any>(null);
+  const [pendingPayment, setPendingPayment] = useState<any>(null);
   const [tab, setTab] = useState<'resumen' | 'cestas' | 'lotes' | 'esg' | 'facturacion' | 'ajustes'>('resumen');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -121,12 +122,27 @@ export default function DashboardPage() {
   const handleSubscribe = async (plan: string) => {
     setLoading(true);
     try {
-      await fetch(`${API_URL}/api/v1/billing/subscribe`, {
+      const res = await fetch(`${API_URL}/api/v1/billing/subscribe`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ plan, provider: 'mock' }),
+        body: JSON.stringify({ plan, provider: 'usdt' }),
       });
-      loadDashboard(token!);
-    } catch {}
+      const data = await res.json();
+      if (res.ok) {
+        // Show the live payment handoff (USDT amount + Binance Pay ID + reference)
+        // so the client knows how/where to pay. Cleared once they activate.
+        setPendingPayment({
+          plan,
+          provider: data.provider,
+          checkoutUrl: data.checkoutUrl,
+          message: data.paymentMessage || data.paymentRef || '',
+          ref: data.paymentRef,
+        });
+        loadDashboard(token!);
+      } else {
+        setError(data.error || 'Error al suscribirse');
+        setPendingPayment(null);
+      }
+    } catch { setError('No se pudo conectar al servidor'); }
     setLoading(false);
   };
 
@@ -468,6 +484,23 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+
+            {pendingPayment && (
+              <div style={{
+                marginTop: 24, padding: 20, borderRadius: 16, background: C.card,
+                border: `1px solid ${C.border}`, textAlign: 'left',
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.green, marginBottom: 8, fontFamily: C.fontDisplay }}>
+                  💳 Pago en {pendingPayment.provider === 'usdt' ? 'USDT (Tether)' : pendingPayment.provider}
+                </div>
+                <pre style={{
+                  whiteSpace: 'pre-wrap', fontFamily: C.font, fontSize: 13, color: C.text2, lineHeight: 1.7, margin: 0,
+                }}>{pendingPayment.message}</pre>
+                <div style={{ fontSize: 12, color: C.text3, marginTop: 12 }}>
+                  Referencia: <b style={{ color: C.text }}>{pendingPayment.ref}</b>. Tras enviar el pago, confirma tu suscripción para activar el plan.
+                </div>
+              </div>
+            )}
           </div>
         )}
         {/* ── AJUSTES ── */}
