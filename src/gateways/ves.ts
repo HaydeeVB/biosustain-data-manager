@@ -39,9 +39,9 @@ export class VesGateway implements IPaymentGateway {
     const vesUsd = amount + VES_USD_BUFFER;                    // e.g. 15 + 3 = 18
     const vesAmount = vesRate > 0 ? vesUsd * vesRate : NaN;
 
-    const bank = process.env.VES_BANK || 'Banco Provincial';
-    const phone = process.env.VES_PHONE || '(número Pago Móvil)';
-    const ci = process.env.VES_CEDULA || '(cédula)';
+    const bank = process.env.VES_BANK || 'Banco de Venezuela (0102)';
+    const phone = process.env.VES_PHONE || '0412-8485662';
+    const ci = process.env.VES_CEDULA || '31.116.955';
     const reference = `VES-${Date.now().toString(36).toUpperCase()}-${randomUUID().substring(0, 6).toUpperCase()}`;
 
     const amountStr = Number.isNaN(vesAmount)

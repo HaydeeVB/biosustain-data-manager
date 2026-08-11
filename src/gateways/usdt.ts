@@ -27,20 +27,27 @@ export class UsdtGateway implements IPaymentGateway {
     // Currency is USD in the billing model; USDT is a USD-pegged stablecoin, so the
     // amount maps 1:1 to USDT. We surface the expected amount in USDT for transparency.
     const usdtAmount = amount.toFixed(2);
-    const wallet = process.env.USDT_WALLET || '(dirección USDT TRC-20 por confirmar)';
+    // Collection rail: prefer a Binance Pay ID (merchant/user) — how clients pay via
+    // Binance Pay — else fall back to a direct TRC-20 wallet address.
+    const binanceId = process.env.BINANCE_PAY_ID || '';
+    const wallet = process.env.USDT_WALLET || '';
     const network = process.env.USDT_NETWORK || 'TRC-20';
     const reference = `BS-${Date.now().toString(36).toUpperCase()}-${randomUUID().substring(0, 6).toUpperCase()}`;
 
+    const collectMethod = binanceId
+      ? `Binance Pay (ID: ${binanceId}) — el cliente envía ${usdtAmount} USDT a esta ID` 
+      : (wallet ? `Dirección USDT (${network}): ${wallet}` : '(colección USDT por configurar)');
+
     const instructions =
-      `Pago en USDT (${network}) — ${usdtAmount} USDT \n` +
+      `Pago en USDT — ${usdtAmount} USDT \n` +
       `Red aprox: ${description} \n` +
-      `Dirección USDT (TRC-20): ${wallet} \n` +
+      `${collectMethod} \n` +
       `Referencia: ${reference} \n` +
       `Monto exacto: ${usdtAmount} USDT (1 USDT = 1 USD) \n` +
-      `Nota: envíe el monto EXACTO y con la referencia como concepto para conciliar; el operador verifica la tx en el explorador (TRCSCAN).`;
+      `Nota: envíe el monto EXACTO y con la referencia como concepto para conciliar.`;
 
     const checkoutUrl =
-      `https://biosustain-dashboard-683265952295.us-central1.run.app/?billing=usdt&ref=${encodeURIComponent(reference)}&amount=${amount}`;
+      `https://biosustainlab.com/?billing=usdt&ref=${encodeURIComponent(reference)}&amount=${amount}`;
 
     return {
       success: true,

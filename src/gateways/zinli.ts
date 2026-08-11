@@ -16,12 +16,12 @@ import { randomUUID } from 'crypto';
 import { IPaymentGateway, PaymentResult } from './types';
 
 // Default operator account details for the transfer (Bank/Venezuela mobile-payment).
-// These should be set via env in production so they're not hardcoded.
+// Set via env in production. Values defaulted to Wiston's live endpoints (2026-08-11).
 const DEFAULT_ZINLI_ACCOUNT = {
-  bank: process.env.ZINLI_BANK || 'Banco Provincial',
-  accountHolder: process.env.ZINLI_ACCOUNT_HOLDER || 'Bio Morphix C.A.',
-  rif: process.env.ZINLI_RIF || 'J-000000000',
-  phone: process.env.ZINLI_PHONE || '(Rellene)',
+  bank: process.env.ZINLI_BANK || 'Banco de Venezuela (0102)',
+  accountHolder: process.env.ZINLI_ACCOUNT_HOLDER || 'Wiston Viteri (BioSustain)',
+  rif: process.env.ZINLI_RIF || '31.116.955',
+  phone: process.env.ZINLI_PHONE || '0412-8485662',
 };
 
 export class ZinliGateway implements IPaymentGateway {
