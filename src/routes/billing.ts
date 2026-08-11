@@ -121,12 +121,13 @@ router.post('/subscribe', authenticateToken, async (req: Request, res: Response)
   subscriptionsEnMemoria.set(subId, subscription);
 
   // TODO: Crear suscripción real en MercadoPago/Stripe
-  // When MercadoPago sandbox keys available, swap mock for real gateway
-  if (provider === 'mock') {
-    const { mockGateway } = await import('../gateways/mock-gateway');
+  // Resolve the active gateway via factory (mock | stripe | zinli) — provider-agnostic.
+  try {
+    const { getGateway, getProviderName } = await import('../gateways');
+    const gateway = getGateway();
     const promoActiva = plan === 'basico';
     const montoAPagar = promoActiva ? 15 : planInfo.precioMensual;
-    const payment = await mockGateway.processPayment(
+    const payment = await gateway.processPayment(
       montoAPagar,
       'USD',
       `Suscripción ${planInfo.nombre} — ${promoActiva ? 'Promo lanzamiento (3 meses)' : 'Mensual'}`,
@@ -136,21 +137,29 @@ router.post('/subscribe', authenticateToken, async (req: Request, res: Response)
       subscription.estado = 'activa';
       subscription.montoMensual = montoAPagar;
     }
+    // Strip accents from the checkout URL / message is not needed; return checkoutUrl
+    // from the gateway so hosted checkouts (stripe) & transfer handoffs (zinli) flow.
+    const activeProvider = getProviderName();
+    res.json({
+      subscriptionId: subId,
+      plan,
+      precioMensual: planInfo.precioMensual,
+      promoLanzamiento: plan === 'basico' ? '15 USD total por los primeros 3 meses' : null,
+      moneda: 'USD',
+      provider: activeProvider,
+      estado: subscription.estado,
+      checkoutUrl: payment.checkoutUrl || (payment.success ? undefined : null),
+      paymentMessage: payment.message,
+      paymentRef: payment.providerRef || payment.transactionId,
+    });
+  } catch (e: any) {
+    console.error('[BILLING] Gateway error:', e.message);
+    res.status(500).json({
+      error: 'No se pudo procesar el pago: ' + e.message,
+      code: 'PAYMENT_GATEWAY_ERROR',
+      hint: 'Verifique PAYMENT_PROVIDER y las credenciales del gateway (STRIPE_SECRET_KEY para stripe).',
+    });
   }
-
-  res.json({
-    subscriptionId: subId,
-    plan,
-    precioMensual: planInfo.precioMensual,
-    promoLanzamiento: plan === 'basico' ? '15 USD total por los primeros 3 meses' : null,
-    moneda: 'USD',
-    provider,
-    estado: subscription.estado,
-    // En producción: redirect URL del provider para completar pago
-    checkoutUrl: provider === 'mercadopago'
-      ? `https://www.mercadopago.com/checkout/demo?plan=${plan}&amount=${planInfo.precioMensual}`
-      : `https://checkout.stripe.com/demo?plan=${plan}&amount=${planInfo.precioMensual}`,
-  });
 });
 
 /**
