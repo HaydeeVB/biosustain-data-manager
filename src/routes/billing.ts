@@ -52,7 +52,10 @@ const PRECIO_CESTA_RETAIL = 150; // Precio premium
 
 const subscribeSchema = z.object({
   plan: z.enum(['basico', 'pro', 'enterprise']),
-  provider: z.enum(['mercadopago', 'stripe', 'mock']).default('mock'),
+  // Accept the live providers (usdt/zinli/ves) + legacy names. Default to 'mock'.
+  // NOTE: the server resolves the ACTIVE gateway from PAYMENT_PROVIDER env, not this
+  // field — but the field must validate so clients can send their chosen rail.
+  provider: z.enum(['mercadopago', 'stripe', 'mock', 'usdt', 'zinli', 'ves']).default('mock'),
 });
 
 const checkoutHaasSchema = z.object({
