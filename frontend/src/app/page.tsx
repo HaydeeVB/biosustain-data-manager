@@ -167,7 +167,7 @@ export default function DashboardPage() {
             <div style={{ position: 'relative', zIndex: 3 }}>
               <div style={{ fontSize: 36, marginBottom: 16 }}>🌱</div>
               <h1 style={{ fontFamily: C.fontDisplay, fontSize: 28, fontWeight: 700, color: C.text, lineHeight: 1.15, marginBottom: 12, textShadow: '0 2px 12px rgba(0,0,0,0.8)' }}>
-                Bioconversión <span style={{ color: C.green }}>inteligente</span> para el Sur del Lago
+                BioSustain — bioconversión <span style={{ color: C.green }}>inteligente</span> y sostenible
               </h1>
               <p style={{ fontSize: 14, color: C.text2, lineHeight: 1.5, textShadow: '0 2px 8px rgba(0,0,0,0.8)' }}>
                 Monitoreo en tiempo real, proyección de biomasa y reportes ESG certificados.
@@ -686,7 +686,7 @@ function LoteCard({ lote }: { lote: any }) {
 }
 
 function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] }) {
-  const [categoria, setCategoria] = useState('palma');
+  const [categoria, setCategoria] = useState('plantas');
   const [categorias, setCategorias] = useState<any[]>([]);
   const [tipoResiduo, setTipoResiduo] = useState('');
   const [pesoKg, setPesoKg] = useState('');
@@ -715,7 +715,7 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           categoria,
-          cestaId: categoria === 'bsf' ? cestaId : undefined, // cestas only for BSF
+          cestaId: categoria === 'larvas' ? cestaId : undefined, // cestas only for BSF
           tipoResiduo,
           pesoKg: parseFloat(pesoKg),
           unidadPrincipal: unidad || undefined,
@@ -765,7 +765,7 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        {categoria === 'bsf' ? (
+        {categoria === 'larvas' ? (
           <div>
             <label style={labelStyle}>Cesta</label>
             <select value={cestaId} onChange={e => setCestaId(e.target.value)} style={inputStyle}>
@@ -796,7 +796,7 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
             <input value={tipoResiduo} onChange={e => setTipoResiduo(e.target.value)} placeholder="Tipo de residuo" style={inputStyle} />
           )}
         </div>
-        {categoria === 'bsf' && (
+        {categoria === 'larvas' && (
           <div>
             <label style={labelStyle}>Sustrato</label>
             <select value={tipoSustrato} onChange={e => setTipoSustrato(e.target.value)} style={inputStyle}>
@@ -824,7 +824,7 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
       {error && <div style={errorStyle}>⚠️ {error}</div>}
       {success && <div style={successStyle}>✓ {success}</div>}
 
-      <button onClick={handleSubmit} disabled={loading || !tipoResiduo || !pesoKg || (categoria === 'bsf' && !cestaId)} style={{
+      <button onClick={handleSubmit} disabled={loading || !tipoResiduo || !pesoKg || (categoria === 'larvas' && !cestaId)} style={{
         padding: '12px 28px', borderRadius: 12, border: 'none', cursor: loading ? 'wait' : 'pointer',
         background: '#3eb002', color: '#060a06', fontSize: 14, fontWeight: 700, fontFamily: "'Inter', sans-serif",
         marginTop: 16, boxShadow: '0 4px 14px rgba(62,176,2,0.25)', opacity: loading ? 0.6 : 1,

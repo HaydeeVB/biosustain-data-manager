@@ -19,7 +19,7 @@ const router = Router();
 // Category-aware lot schema. `categoria` drives dynamic units, params, and ESG calcs.
 const loteSchema = z.object({
   cestaId: z.string().min(1).optional(),   // optional: BSF legacy nests under cestas
-  categoria: z.enum(['palma','ganado','platano','bsf']).default('bsf'),
+  categoria: z.enum(['plantas', 'ganado', 'larvas']).default('plantas'),
   tipoResiduo: z.string().min(2),
   pesoKg: z.number().positive(),
   unidadPrincipal: z.string().optional(),
@@ -161,7 +161,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const lotes = result.rows.map((r: any) => ({
       id: r.id,
-      categoria: r.categoria || 'bsf',
+      categoria: r.categoria || 'plantas',
       cestaId: r.cesta_id,
       cestaUbicacion: r.cesta_ubicacion,
       tipoResiduo: r.tipo_residuo,
