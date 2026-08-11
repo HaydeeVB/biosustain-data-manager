@@ -25,6 +25,34 @@ import { IPaymentGateway, PaymentResult } from './types';
 // Per plan, the caller passes the base USD amount; we apply the +$3 buffer for VES.
 export const VES_USD_BUFFER = 3.0;
 
+// Official BCV rate source (no auth, static JSON CDN — dolarvzla's official monitor).
+// Returns {"current":{"date":"...","usd":761.21,...}}. Falls back to the BCV_RATE env
+// var if unavailable, so a stale/absent env never breaks the quote.
+const BCV_RATE_URL = 'https://rates.dolarvzla.com/bcv/current.json';
+
+/**
+ * Fetch the current official BCV USD->VES rate. Tries the live source first (it only
+ * matters if the process has network), then falls back to the BCV_RATE env. Returns 0
+ * only when nothing is available (caller shows "no disponible").
+ */
+export async function fetchBcvRate(): Promise<number> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000); // don't hang the charge
+    const res = await fetch(BCV_RATE_URL, { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = (await res.json()) as { current?: { usd?: number } };
+      const rate = data?.current?.usd;
+      if (typeof rate === 'number' && rate > 0) return rate;
+    }
+  } catch {
+    // network failure or timeout — fall through to env fallback
+  }
+  const envRate = parseFloat(process.env.BCV_RATE || '0');
+  return Number.isFinite(envRate) && envRate > 0 ? envRate : 0;
+}
+
 export class VesGateway implements IPaymentGateway {
   async processPayment(
     amount: number,          // base USD amount (e.g. 15 for basic)
@@ -32,11 +60,9 @@ export class VesGateway implements IPaymentGateway {
     description: string,
     customerId: string
   ): Promise<PaymentResult> {
-    // VES price = (base USD + buffer) converted at the official BCV rate.
-    // rate: Fetched from BCV (recommended) or provided via env/caller. Here we read
-    // from env so the platform can keep it fresh; a real impl calls BCV's API.
-    const vesRate = parseFloat(process.env.BCV_RATE || '0');   // VES per USD
-    const vesUsd = amount + VES_USD_BUFFER;                    // e.g. 15 + 3 = 18
+    // Live official BCV rate (fetched at charge time), falling back to BCV_RATE env.
+    const vesRate = await fetchBcvRate();                        // VES per USD
+    const vesUsd = amount + VES_USD_BUFFER;                      // e.g. 15 + 3 = 18
     const vesAmount = vesRate > 0 ? vesUsd * vesRate : NaN;
 
     const bank = process.env.VES_BANK || 'Banco de Venezuela (0102)';
