@@ -261,4 +261,46 @@ router.post('/checkout-haas', authenticateToken, async (req: Request, res: Respo
   });
 });
 
+/**
+ * POST /api/v1/billing/admin/activate-plan
+ * Manual crypto-payment activation (Path A). After a client pays USDT manually and
+ * the operator confirms on-chain, this flips the client's plan to the paid tier.
+ * Secured by a shared ADMIN_KEY bearer token (env) — NOT the client JWT. Idempotent.
+ *
+ * Body: { clienteEmail: string, plan: 'basico'|'pro'|'enterprise' }
+ * Header: Authorization: Bearer <ADMIN_KEY>
+ */
+router.post('/admin/activate-plan', async (req: Request, res: Response) => {
+  const adminKey = process.env.ADMIN_KEY || '';
+  const provided = (req.headers.authorization || '').replace(/^Bearer /i, '').trim();
+  if (!adminKey || provided !== adminKey) {
+    return res.status(401).json({ error: 'Unauthorized — valid ADMIN_KEY required', code: 'ADMIN_UNAUTHORIZED' });
+  }
+
+  const schema = z.object({
+    clienteEmail: z.string().email(),
+    plan: z.enum(['basico', 'pro', 'enterprise']),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid body', issues: parsed.error.issues });
+  }
+  const { clienteEmail, plan } = parsed.data;
+
+  try {
+    const result = await query(
+      'UPDATE clientes SET plan = $1 WHERE email = $2 RETURNING id, nombre, email, plan',
+      [plan, clienteEmail]
+    );
+    if (isDbConfigured() && result.rowCount === 0) {
+      return res.status(404).json({ error: 'Cliente no encontrado con ese email' });
+    }
+    const row = result.rows[0];
+    res.json({ ok: true, cliente: row || { email: clienteEmail, plan }, activado: plan });
+  } catch (e: any) {
+    console.error('[BILLING] admin activate-plan error:', e.message);
+    res.status(500).json({ error: 'No se pudo activar el plan: ' + e.message });
+  }
+});
+
 export default router;
