@@ -27,19 +27,23 @@ const providers: Record<string, IPaymentGateway> = {
   ves: vesGateway,
 };
 
-/** Resolve the active gateway. Unknown provider falls back to mock (safe default). */
-export function getGateway(): IPaymentGateway {
-  const provider = (process.env.PAYMENT_PROVIDER || 'mock').toLowerCase();
+/**
+ * Resolve a gateway. Pass an explicit `providerName` to select a specific rail
+ * (e.g. a client choosing 'ves' Pago Móvil over 'usdt' USDT). With no arg, uses the
+ * PAYMENT_PROVIDER env (the "default/live" rail). Unknown → mock (safe).
+ */
+export function getGateway(providerName?: string): IPaymentGateway {
+  const provider = (providerName || process.env.PAYMENT_PROVIDER || 'mock').toLowerCase();
   const gateway = providers[provider];
   if (!gateway) {
-    console.warn(`[Payments] Unknown PAYMENT_PROVIDER "${provider}", falling back to mock`);
+    console.warn(`[Payments] Unknown provider "${provider}", falling back to mock`);
     return mockGateway;
   }
   return gateway;
 }
 
 /** Active provider name (for reporting / checkout URL logic at the route). */
-export function getProviderName(): string {
-  const provider = (process.env.PAYMENT_PROVIDER || 'mock').toLowerCase();
+export function getProviderName(providerName?: string): string {
+  const provider = (providerName || process.env.PAYMENT_PROVIDER || 'mock').toLowerCase();
   return provider in providers ? provider : 'mock';
 }

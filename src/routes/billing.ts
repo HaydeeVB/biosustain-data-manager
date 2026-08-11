@@ -124,10 +124,14 @@ router.post('/subscribe', authenticateToken, async (req: Request, res: Response)
   subscriptionsEnMemoria.set(subId, subscription);
 
   // TODO: Crear suscripción real en MercadoPago/Stripe
-  // Resolve the active gateway via factory (mock | stripe | zinli) — provider-agnostic.
+  // Resolve the gateway — prefer the client's chosen rail (usdt|ves|zinli) if valid,
+  // else fall back to the PAYMENT_PROVIDER env default. This lets a client pay in VES
+  // (Pago Móvil) even when the server default is USDT.
   try {
     const { getGateway, getProviderName } = await import('../gateways');
-    const gateway = getGateway();
+    const validRails = ['mock', 'stripe', 'zinli', 'usdt', 'ves'];
+    const chosen = validRails.includes(provider) ? provider : undefined;
+    const gateway = getGateway(chosen);
     const promoActiva = plan === 'basico';
     const montoAPagar = promoActiva ? 15 : planInfo.precioMensual;
     const payment = await gateway.processPayment(
@@ -142,7 +146,7 @@ router.post('/subscribe', authenticateToken, async (req: Request, res: Response)
     }
     // Strip accents from the checkout URL / message is not needed; return checkoutUrl
     // from the gateway so hosted checkouts (stripe) & transfer handoffs (zinli) flow.
-    const activeProvider = getProviderName();
+    const activeProvider = getProviderName(chosen);
     res.json({
       subscriptionId: subId,
       plan,
