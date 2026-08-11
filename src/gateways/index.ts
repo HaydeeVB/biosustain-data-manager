@@ -14,6 +14,7 @@ import { mockGateway } from './mock-gateway';
 import { stripeGateway } from './stripe';
 import { zinliGateway } from './zinli';
 import { usdtGateway } from './usdt';
+import { vesGateway } from './ves';
 
 export type * from './types';
 export type { IPaymentGateway, PaymentResult } from './types';
@@ -23,6 +24,7 @@ const providers: Record<string, IPaymentGateway> = {
   stripe: stripeGateway,
   zinli: zinliGateway,
   usdt: usdtGateway,
+  ves: vesGateway,
 };
 
 /** Resolve the active gateway. Unknown provider falls back to mock (safe default). */
