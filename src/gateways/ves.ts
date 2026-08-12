@@ -65,9 +65,9 @@ export class VesGateway implements IPaymentGateway {
     const vesUsd = amount + VES_USD_BUFFER;                      // e.g. 15 + 3 = 18
     const vesAmount = vesRate > 0 ? vesUsd * vesRate : NaN;
 
-    const bank = process.env.VES_BANK || 'Banco de Venezuela (0102)';
+    const bank = process.env.VES_BANK || 'UbiApp';
     const phone = process.env.VES_PHONE || '0412-8485662';
-    const ci = process.env.VES_CEDULA || '31.116.955';
+    const ci = process.env.VES_CEDULA || 'V-31116955';
     const reference = `VES-${Date.now().toString(36).toUpperCase()}-${randomUUID().substring(0, 6).toUpperCase()}`;
 
     const amountStr = Number.isNaN(vesAmount)
@@ -75,12 +75,13 @@ export class VesGateway implements IPaymentGateway {
       : vesAmount.toLocaleString('es-VE', { maximumFractionDigits: 2 });
 
     const instructions =
-      `Pago en Bolívares (Pago Móvil) — ${description} \n` +
+      `Pago en Bolívares (Pago Móvil / UbiApp) — ${description} \n` +
       `Monto en USD (con búfer de 3 USD): ${vesUsd.toFixed(2)} USD \n` +
       `Tasa BCV (VES/USD): ${vesRate > 0 ? vesRate.toFixed(2) : 'no configurada'} \n` +
       `Monto a pagar en Bolívares: Bs. ${amountStr} \n` +
-      `Banco: ${bank} \n` +
-      `Teléfono/Banco (Pago Móvil): ${phone} \n` +
+      `Plataforma: ${bank} \n` +
+      `Banco destino (Pago Móvil): ${process.env.VES_DEST_BANK || 'Banco Venezolano de Crédito (0104)'} \n` +
+      `Teléfono (Pago Móvil): ${phone} \n` +
       `Cédula/RIF: ${ci} \n` +
       `Referencia: ${reference} \n` +
       `Nota: el búfer de 3 USD cubre la diferencia Tasa BCV vs mercado P2P (12-20%) para no perder margen.`;
