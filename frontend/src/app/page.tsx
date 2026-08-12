@@ -44,6 +44,9 @@ export default function DashboardPage() {
   const [publicStats, setPublicStats] = useState({ cestas: 0, eficiencia: 0, co2e: 0 });
   const [cliente, setCliente] = useState<any>(null);
   const [pendingPayment, setPendingPayment] = useState<any>(null);
+  const [payMethod, setPayMethod] = useState<string>('usdt');   // chosen payment rail (usdt | ves | zinli)
+  const [payRef, setPayRef] = useState('');                      // client-entered payment reference
+  const [payConfirmed, setPayConfirmed] = useState(false);
   const [tab, setTab] = useState<'resumen' | 'cestas' | 'lotes' | 'esg' | 'facturacion' | 'ajustes'>('resumen');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -119,17 +122,17 @@ export default function DashboardPage() {
     setLoading(false);
   };
 
-  const handleSubscribe = async (plan: string) => {
+  const handleSubscribe = async (plan: string, provider: string = payMethod) => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/v1/billing/subscribe`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ plan, provider: 'usdt' }),
+        body: JSON.stringify({ plan, provider }),
       });
       const data = await res.json();
       if (res.ok) {
-        // Show the live payment handoff (USDT amount + Binance Pay ID + reference)
-        // so the client knows how/where to pay. Cleared once they activate.
+        // Show the chosen rail's live payment handoff (USDT = Binance Pay ID,
+        // VES = Pago Móvil/UbiApp) so the client knows how/where to pay.
         setPendingPayment({
           plan,
           provider: data.provider,
@@ -137,6 +140,7 @@ export default function DashboardPage() {
           message: data.paymentMessage || data.paymentRef || '',
           ref: data.paymentRef,
         });
+        setPayConfirmed(false); setPayRef('');
         loadDashboard(token!);
       } else {
         setError(data.error || 'Error al suscribirse');
@@ -448,6 +452,30 @@ export default function DashboardPage() {
               </div>
             )}
 
+            {/* Payment method selector — USDT (Binance) vs VES (Pago Móvil/UbiApp) */}
+            <div style={{
+              background: C.card, borderRadius: 16, padding: 20, marginBottom: 20,
+              border: `1px solid ${C.border}`,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10, fontFamily: C.fontDisplay }}>
+                Método de pago
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {[
+                  { id: 'usdt', icon: '🪙', name: 'USDT (Tether)', desc: 'Binance Pay · 100% seguro · en USD' },
+                  { id: 'ves', icon: '💳', name: 'Bolívares (Pago Móvil)', desc: 'UbiApp · tasa BCV oficial · búfer +3 USD' },
+                ].map((m) => (
+                  <div key={m.id} onClick={() => setPayMethod(m.id)} style={{
+                    padding: 14, borderRadius: 12, cursor: 'pointer', border: `1.5px solid ${payMethod === m.id ? C.green : C.border}`,
+                    background: payMethod === m.id ? C.greenGlow : 'transparent', transition: 'all .15s',
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.text }}>{m.icon} {m.name}</div>
+                    <div style={{ fontSize: 11, color: C.text3, marginTop: 4 }}>{m.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="plan-grid" style={{ display: 'grid', gap: 16 }}>
               {plans && plans.planes && Object.entries(plans.planes).map(([key, p]: [string, any]) => (
                 <div key={key} style={{
@@ -476,11 +504,11 @@ export default function DashboardPage() {
                       <li key={i} style={{ display: 'flex', gap: 8 }}><span style={{ color: C.green }}>✓</span> {f}</li>
                     ))}
                   </ul>
-                  <button onClick={() => handleSubscribe(key)} disabled={loading} style={{
+                  <button onClick={() => handleSubscribe(key, payMethod)} disabled={loading} style={{
                     width: '100%', padding: 12, borderRadius: 10, border: 'none', cursor: 'pointer',
                     background: key === 'pro' ? C.green : C.border, color: key === 'pro' ? '#fff' : C.text,
                     fontSize: 14, fontWeight: 600, fontFamily: C.font, marginTop: 16,
-                  }}>Suscribirse</button>
+                  }}>{loading ? 'Procesando...' : 'Suscribirse'}</button>
                 </div>
               ))}
             </div>
@@ -491,13 +519,42 @@ export default function DashboardPage() {
                 border: `1px solid ${C.border}`, textAlign: 'left',
               }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.green, marginBottom: 8, fontFamily: C.fontDisplay }}>
-                  💳 Pago en {pendingPayment.provider === 'usdt' ? 'USDT (Tether)' : pendingPayment.provider}
+                  💳 Pago en {pendingPayment.provider === 'ves' ? 'Bolívares (Pago Móvil / UbiApp)' : pendingPayment.provider === 'usdt' ? 'USDT (Tether)' : pendingPayment.provider}
                 </div>
                 <pre style={{
                   whiteSpace: 'pre-wrap', fontFamily: C.font, fontSize: 13, color: C.text2, lineHeight: 1.7, margin: 0,
                 }}>{pendingPayment.message}</pre>
                 <div style={{ fontSize: 12, color: C.text3, marginTop: 12 }}>
-                  Referencia: <b style={{ color: C.text }}>{pendingPayment.ref}</b>. Tras enviar el pago, confirma tu suscripción para activar el plan.
+                  Referencia: <b style={{ color: C.text }}>{pendingPayment.ref}</b>. tras enviar el pago, ingresa la referencia abajo para confirmar.
+                </div>
+
+                {/* Payment reference confirmation */}
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+                  <label style={{ fontSize: 12, color: C.text2, display: 'block', marginBottom: 6 }}>
+                    {payConfirmed
+                      ? '✓ Pago reportado. Wiston verificará y activará tu plan.'
+                      : `Ingresa el número de referencia de tu pago (${pendingPayment.ref}) para reportarlo:`}
+                  </label>
+                  {!payConfirmed && (
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <input
+                        value={payRef} onChange={(e) => setPayRef(e.target.value)}
+                        placeholder="Ej. BS-MSPFLJ..."
+                        style={{
+                          flex: 1, padding: '10px 12px', borderRadius: 8, border: `1px solid ${C.border}`,
+                          background: '#0f1a0f', color: C.text, fontSize: 13, fontFamily: C.font,
+                        }}
+                      />
+                      <button
+                        onClick={() => { if (payRef.trim()) { setPayRef(payRef.trim()); setPayConfirmed(true); } }}
+                        disabled={!payRef.trim()}
+                        style={{
+                          padding: '10px 16px', borderRadius: 8, border: 'none', cursor: payRef.trim() ? 'pointer' : 'not-allowed',
+                          background: payRef.trim() ? C.green : C.border, color: '#fff', fontSize: 13, fontWeight: 600,
+                        }}
+                      >Confirmar pago</button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

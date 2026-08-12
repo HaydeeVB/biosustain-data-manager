@@ -141,7 +141,13 @@ router.post('/subscribe', authenticateToken, async (req: Request, res: Response)
       clienteId
     );
     if (payment.success) {
-      subscription.estado = 'activa';
+      // For MANUAL-verification rails (usdt/ves/zinli — operator confirms the payment
+      // landed, then activates via the admin endpoint), keep the subscription PENDING.
+      // Only truly auto-verified rails (e.g. a hosted card checkout that captures) would
+      // transition to 'activa' automatically. This prevents clients being marked active
+      // before payment is actually confirmed.
+      const autoVerified = ['mock', 'stripe'].includes(chosen || process.env.PAYMENT_PROVIDER || '');
+      subscription.estado = autoVerified ? 'activa' : 'pendiente';
       subscription.montoMensual = montoAPagar;
     }
     // Strip accents from the checkout URL / message is not needed; return checkoutUrl
