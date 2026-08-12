@@ -442,12 +442,18 @@ export default function DashboardPage() {
           <div className="animate-in">
             {subscription && subscription.plan && (
               <div style={{
-                background: C.greenGlow, borderRadius: 16, padding: 20, marginBottom: 20,
-                border: `1px solid ${C.green}`,
+                background: pendingPayment || (subscription.estado && subscription.estado !== 'activa') ? 'rgba(200,180,100,0.1)' : C.greenGlow,
+                borderRadius: 16, padding: 20, marginBottom: 20,
+                border: `1px solid ${(pendingPayment || (subscription.estado && subscription.estado !== 'activa')) ? '#cca' : C.green}`,
               }}>
-                <div style={{ fontWeight: 700, color: C.green, fontSize: 15 }}>✓ Suscripción activa: {subscription.plan}</div>
+                <div style={{ fontWeight: 700, color: (pendingPayment || (subscription.estado && subscription.estado !== 'activa')) ? '#cca' : C.green, fontSize: 15 }}>
+                  {(pendingPayment || (subscription.estado && subscription.estado !== 'activa'))
+                    ? '⏳ Pago pendiente de verificación'
+                    : `✓ Suscripción activa: ${subscription.plan}`}
+                </div>
                 <div style={{ fontSize: 13, color: C.text2, marginTop: 4 }}>
-                  Estado: {subscription.estado || 'activa'} · ${subscription.montoMensual || 0}/mes
+                  {subscription.estado || 'activa'} · ${subscription.montoMensual || 0}/mes
+                  {pendingPayment ? ` — esperando confirmación del pago (ref ${pendingPayment.ref})` : ''}
                 </div>
               </div>
             )}
