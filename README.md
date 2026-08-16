@@ -64,10 +64,8 @@ npm run dev
 
 - **Haydee Zulay Viteri Bernal** — CEO & Fundadora, Estrategia
 - **Wiston Ricardo Viteri Bernal** — Lead Technical & Research
-- **José Alejandro Vargas** — Software Architecture & Backend
 - **Sharon Guillen** — Strategy & UX
 - **Diana Paola Contreras Sanchez** — Lab & Production Data
-- **Robespierre Reinaldo Carrillo Arias** — Legal & Logistics
 
 ## Colaboración técnica
 
