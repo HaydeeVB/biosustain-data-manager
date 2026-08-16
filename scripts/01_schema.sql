@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     cliente_id VARCHAR(100) REFERENCES clientes(id),
     plan VARCHAR(20) NOT NULL CHECK (plan IN ('basico', 'pro', 'enterprise')),
     estado VARCHAR(20) DEFAULT 'activa' CHECK (estado IN ('activa', 'suspendida', 'cancelada', 'pendiente')),
-    provider VARCHAR(20) DEFAULT 'mercadopago' CHECK (provider IN ('mercadopago', 'stripe')),
+    provider VARCHAR(20) DEFAULT 'mock' CHECK (provider IN ('mercadopago', 'stripe', 'mock', 'usdt', 'zinli', 'ves')),
     provider_subscription_id VARCHAR(255),
     inicio TIMESTAMPTZ DEFAULT NOW(),
     fin TIMESTAMPTZ,

@@ -64,7 +64,13 @@ const checkoutHaasSchema = z.object({
   precioPorCesta: z.number().min(40).max(200).default(PRECIO_CESTA),
 });
 
-// ── Almacenamiento en memoria ────────────────────────────────────────────────
+// ── Almacenamiento: DB subscriptions table (single source of truth) ─────────
+// DSA audit F2 (2026-08-16): subscription state was split between an in-memory
+// Map (subscriptionsEnMemoria) and the DB (clientes.plan). A server restart lost
+// all in-memory subscriptions while the DB plan persisted — the two could drift.
+// Now the DB `subscriptions` table is the ONLY source of truth; the in-memory
+// Map is removed. Survives restarts; admin activation and client subscription
+// read the same store.
 
 interface Subscription {
   id: string;
@@ -76,8 +82,6 @@ interface Subscription {
   montoMensual: number;
   moneda: string;
 }
-
-const subscriptionsEnMemoria: Map<string, Subscription> = new Map();
 
 // ── Endpoints ──────────────────────────────────────────────────────────────────
 
@@ -121,7 +125,20 @@ router.post('/subscribe', authenticateToken, async (req: Request, res: Response)
     moneda: 'USD',
   };
 
-  subscriptionsEnMemoria.set(subId, subscription);
+  // Persist to the DB subscriptions table (single source of truth). If the DB
+  // isn't configured (demo mode), fall back to a no-op so the route still works.
+  if (isDbConfigured()) {
+    try {
+      await query(
+        `INSERT INTO subscriptions (id, cliente_id, plan, estado, provider, inicio, monto_mensual, moneda)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO NOTHING`,
+        [subId, clienteId, plan, 'pendiente', provider, subscription.inicio, planInfo.precioMensual, 'USD']
+      );
+    } catch (e: any) {
+      console.error('[BILLING] Persist subscription error:', e.message);
+    }
+  }
 
   // TODO: Crear suscripción real en MercadoPago/Stripe
   // Resolve the gateway — prefer the client's chosen rail (usdt|ves|zinli) if valid,
@@ -179,56 +196,78 @@ router.post('/subscribe', authenticateToken, async (req: Request, res: Response)
  * GET /api/v1/billing/subscription
  * Devuelve el estado de la suscripción del cliente.
  */
-router.get('/subscription', authenticateToken, (req: Request, res: Response) => {
+router.get('/subscription', authenticateToken, async (req: Request, res: Response) => {
   const clienteId = req.cliente?.clienteId;
   if (!clienteId) {
     res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
     return;
   }
 
-  const sub = Array.from(subscriptionsEnMemoria.values())
-    .find(s => s.clienteId === clienteId);
-
-  if (!sub) {
+  if (!isDbConfigured()) {
     res.json({ tieneSuscripcion: false });
     return;
   }
 
-  res.json({
-    tieneSuscripcion: true,
-    subscriptionId: sub.id,
-    plan: sub.plan,
-    estado: sub.estado,
-    provider: sub.provider,
-    montoMensual: sub.montoMensual,
-    moneda: sub.moneda,
-    inicio: sub.inicio.toISOString(),
-  });
+  try {
+    const result = await query(
+      `SELECT id, plan, estado, provider, inicio, monto_mensual, moneda
+       FROM subscriptions WHERE cliente_id = $1
+       ORDER BY inicio DESC LIMIT 1`,
+      [clienteId]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      res.json({ tieneSuscripcion: false });
+      return;
+    }
+    res.json({
+      tieneSuscripcion: true,
+      subscriptionId: row.id,
+      plan: row.plan,
+      estado: row.estado,
+      provider: row.provider,
+      montoMensual: parseFloat(row.monto_mensual),
+      moneda: row.moneda,
+      inicio: row.inicio instanceof Date ? row.inicio.toISOString() : new Date(row.inicio).toISOString(),
+    });
+  } catch (e: any) {
+    console.error('[BILLING] Subscription read error:', e.message);
+    res.status(500).json({ error: 'Error al obtener suscripción.', code: 'DB_ERROR' });
+  }
 });
 
 /**
  * POST /api/v1/billing/cancel
  * Cancela la suscripción del cliente.
  */
-router.post('/cancel', authenticateToken, (req: Request, res: Response) => {
+router.post('/cancel', authenticateToken, async (req: Request, res: Response) => {
   const clienteId = req.cliente?.clienteId;
   if (!clienteId) {
     res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
     return;
   }
 
-  const sub = Array.from(subscriptionsEnMemoria.values())
-    .find(s => s.clienteId === clienteId);
-
-  if (!sub) {
+  if (!isDbConfigured()) {
     res.status(404).json({ error: 'No tiene suscripción activa.', code: 'NO_SUBSCRIPTION' });
     return;
   }
 
-  sub.estado = 'cancelada';
-
-  // TODO: Cancelar en el provider (MercadoPago/Stripe)
-  res.json({ ok: true, message: 'Suscripción cancelada.', subscriptionId: sub.id });
+  try {
+    const result = await query(
+      `UPDATE subscriptions SET estado = 'cancelada'
+       WHERE cliente_id = $1 AND estado IN ('activa', 'pendiente')
+       RETURNING id`,
+      [clienteId]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'No tiene suscripción activa.', code: 'NO_SUBSCRIPTION' });
+      return;
+    }
+    res.json({ ok: true, message: 'Suscripción cancelada.', subscriptionId: result.rows[0].id });
+  } catch (e: any) {
+    console.error('[BILLING] Cancel error:', e.message);
+    res.status(500).json({ error: 'Error al cancelar suscripción.', code: 'DB_ERROR' });
+  }
 });
 
 /**

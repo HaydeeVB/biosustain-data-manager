@@ -51,6 +51,8 @@ export interface Categoria {
     co2eFactor: number;              // kg CO2e avoided per kg residuo
     methaneFactor: number;           // kg CH4 avoided per kg residuo
     harvestDays: number;             // typical process cycle (days)
+    /** Fraction of biomass that becomes frass/compost (DSA audit F4: was a magic 0.4 in routes). */
+    frassFactor: number;
   };
   /** Default units for a lot's primary metric */
   defaultUnit: string;
@@ -84,6 +86,7 @@ export const CATEGORIAS: Record<CategoriaId, Categoria> = {
       co2eFactor: 0.42,
       methaneFactor: 0.05,
       harvestDays: 45,       // vegetal residue to compost
+      frassFactor: 0.4,      // 40% of biomass → frass/compost
     },
     defaultUnit: 'kg',
   },
@@ -111,6 +114,7 @@ export const CATEGORIAS: Record<CategoriaId, Categoria> = {
       co2eFactor: 1.15,      // high CO2e avoided (manure is a big emitter)
       methaneFactor: 0.28,
       harvestDays: 45,       // slurry to stabilized biofertilizer
+      frassFactor: 0.4,      // 40% of biomass → frass/compost
     },
     defaultUnit: 'kg',
   },
@@ -138,6 +142,7 @@ export const CATEGORIAS: Record<CategoriaId, Categoria> = {
       co2eFactor: 0.18,
       methaneFactor: 0.02,
       harvestDays: 14,       // BSF cycle
+      frassFactor: 0.4,      // 40% of biomass → frass/compost
     },
     defaultUnit: 'kg de biomasa larvaria',
   },
@@ -145,11 +150,18 @@ export const CATEGORIAS: Record<CategoriaId, Categoria> = {
 
 export const CATEGORIA_LIST = Object.values(CATEGORIAS);
 
+/** Legacy id → current category id map (DSA audit F4: was inline ternaries in getCategoria). */
+const LEGACY_ID_MAP: Record<string, CategoriaId> = {
+  palma: 'plantas',
+  platano: 'plantas',
+  bsf: 'larvas',
+};
+
 /** Get a category config by id; defaults to 'plantas' for unknown/legacy ids. */
 export function getCategoria(id?: string | null): Categoria {
   if (!id) return CATEGORIAS.plantas;
-  const normalized = (id === 'palma' || id === 'platano') ? 'plantas' : (id === 'bsf' ? 'larvas' : id);
-  return CATEGORIAS[normalized as CategoriaId] || CATEGORIAS.plantas;
+  const normalized = LEGACY_ID_MAP[id] || (id as CategoriaId);
+  return CATEGORIAS[normalized] || CATEGORIAS.plantas;
 }
 
 /** Classify a status (green/orange/red) for a monitored param value in a category. */

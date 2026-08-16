@@ -32,17 +32,31 @@ router.get('/', async (req: Request, res: Response) => {
     );
 
     const lotes = lotesResult.rows;
-    const totalResiduosKg = lotes.reduce((sum: number, l: any) => sum + parseFloat(l.peso_kg || 0), 0);
-    const totalBiomasaKg = lotes.reduce((sum: number, l: any) => sum + parseFloat(l.biomasa_estimada_kg || 0), 0);
-    const totalCo2eKg = lotes.reduce((sum: number, l: any) => sum + parseFloat(l.co2e_reducido_kg || 0), 0);
-    // Methane is now category-specific (stored at registration). Fall back to the
-    // legacy approximation only for pre-category lots that have no metano_evitado.
-    const totalMetanoKg = lotes.reduce((sum: number, l: any) => {
-      const stored = parseFloat(l.metano_evitado_kg);
-      if (stored > 0) return sum + stored;
-      return sum + parseFloat(l.peso_kg || 0) * 0.15; // legacy estimate for old lots
-    }, 0);
-    const frassKg = totalBiomasaKg * 0.4; // 40% de biomasa → frass/compos
+    // Single-pass aggregation (DSA audit F3): one reduce computes all four totals
+    // instead of four separate O(n) passes re-parsing the same fields.
+    const totals = lotes.reduce(
+      (acc: { residuos: number; biomasa: number; co2e: number; metano: number }, l: any) => {
+        const peso = parseFloat(l.peso_kg || 0);
+        const biomasa = parseFloat(l.biomasa_estimada_kg || 0);
+        const co2e = parseFloat(l.co2e_reducido_kg || 0);
+        // Methane is now category-specific (stored at registration). Fall back to the
+        // legacy approximation only for pre-category lots that have no metano_evitado.
+        const storedMetano = parseFloat(l.metano_evitado_kg);
+        const metano = storedMetano > 0 ? storedMetano : peso * 0.15; // legacy estimate for old lots
+        return {
+          residuos: acc.residuos + peso,
+          biomasa: acc.biomasa + biomasa,
+          co2e: acc.co2e + co2e,
+          metano: acc.metano + metano,
+        };
+      },
+      { residuos: 0, biomasa: 0, co2e: 0, metano: 0 }
+    );
+    const totalResiduosKg = totals.residuos;
+    const totalBiomasaKg = totals.biomasa;
+    const totalCo2eKg = totals.co2e;
+    const totalMetanoKg = totals.metano;
+    const frassKg = totalBiomasaKg * 0.4; // 40% de biomasa → frass/compos (kept as aggregate estimate)
 
     // Telemetría para eficiencia
     const telemetryResult = await query(

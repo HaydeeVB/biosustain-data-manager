@@ -34,7 +34,7 @@ function calcForCategoria(cat: Categoria, pesoKg: number) {
     biomasaEstimada: +(pesoKg * e.biomassFactor).toFixed(2),
     co2eReducido: +(pesoKg * e.co2eFactor).toFixed(2),
     metanoEvitado: +(pesoKg * e.methaneFactor).toFixed(2),
-    frassEstimado: +(pesoKg * e.biomassFactor * 0.4).toFixed(2),
+    frassEstimado: +(pesoKg * e.biomassFactor * e.frassFactor).toFixed(2),
     fechaCosecha: new Date(Date.now() + e.harvestDays * 24 * 60 * 60 * 1000),
   };
 }
