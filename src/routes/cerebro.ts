@@ -65,7 +65,16 @@ import { GoogleGenAI } from '@google/genai';
 
 let _genai: GoogleGenAI | null = null;
 function getGenai(): GoogleGenAI {
-  if (!_genai) _genai = new GoogleGenAI({}); // uses ADC (GOOGLE_APPLICATION_CREDENTIALS / metadata server)
+  if (!_genai) {
+    // Use Vertex AI mode: the service account's cloud-platform scope covers it
+    // (the Gemini Developer API needs a generative-language scope Cloud Run's
+    // default token lacks). Vertex AI uses the same models via the same SDK.
+    _genai = new GoogleGenAI({
+      vertexai: true,
+      project: process.env.GCP_PROJECT || 'caramelo33',
+      location: process.env.GCP_LOCATION || 'us-central1',
+    });
+  }
   return _genai;
 }
 
