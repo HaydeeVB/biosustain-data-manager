@@ -20,6 +20,10 @@ const router = Router();
 
 const CEREBRO_URL = process.env.CEREBRO_URL || 'http://localhost:8001';
 const CEREBRO_API_KEY = process.env.CEREBRO_API_KEY || '';
+// Real Gemini API key (GOOGLE_API_KEY is the working key; GEMINI_API_KEY is the
+// legacy name). Used for the gemini-diagnostic endpoint — a REAL LLM call.
+const GEMINI_API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 // ── Esquemas ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +53,36 @@ const geminiDiagnosticSchema = z.object({
   }),
   pregunta: z.string().max(500),
 });
+
+// ── Helper: llamada real a Gemini API ─────────────────────────────────────────
+// Real LLM call for the gemini-diagnostic endpoint. Uses the Gemini REST API
+// (generativelanguage.googleapis.com) with the working GOOGLE_API_KEY. This is
+// the "at least one real Gemini API call" requirement for the Build with Gemini
+// XPRIZE. Falls back to demo mode only if no key is configured.
+
+async function callGemini(prompt: string): Promise<string> {
+  if (!GEMINI_API_KEY) {
+    return 'Modo demo — Gemini API no configurada. El sistema está operando correctamente.';
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
+    }),
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  return text || 'Sin respuesta del modelo.';
+}
 
 // ── Helper: petición al Cerebro ────────────────────────────────────────────────
 
@@ -184,8 +218,26 @@ router.post('/gemini-diagnostic', async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await callCerebro('/model/gemini-diagnostic', parseResult.data);
-    res.json({ resultado: result, cestaId: parseResult.data.cestaId });
+    // REAL Gemini API call (Build with Gemini XPRIZE requirement). Build a
+    // diagnostic prompt from the cesta metrics + user question, call Gemini.
+    const { cestaId, metricas, pregunta } = parseResult.data;
+    const prompt = [
+      'Eres un asistente experto en bioconversión con Mosca Soldado Negra (Hermetia illucens).',
+      `Cesta: ${cestaId}`,
+      `Métricas: temperatura=${metricas.temperatura ?? 'n/d'}°C, humedad=${metricas.humedad ?? 'n/d'}%, amoniaco=${metricas.amoniaco ?? 'n/d'}ppm, biomasa=${metricas.biomasa ?? 'n/d'}kg.`,
+      `Pregunta del operador: ${pregunta}`,
+      'Proporciona un diagnóstico breve y accionable (máx 3-4 frases) en español.',
+    ].join('\n');
+    const diagnostico = await callGemini(prompt);
+    res.json({
+      resultado: {
+        cesta_id: cestaId,
+        diagnostico,
+        modelo: GEMINI_MODEL,
+        demo: !GEMINI_API_KEY,
+      },
+      cestaId,
+    });
   } catch (err) {
     console.error('[CEREBRO] Error en gemini-diagnostic:', err);
     res.status(502).json({ error: 'Error del motor.', code: 'CEREBRO_ERROR' });
