@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 
 import { VideoBackground } from './VideoBackground';
+import { AuthInput, KpiCard, Sparkline, EmptyState, labelStyle, inputStyle, errorStyle, successStyle } from '../components/ui';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://biosustain-saas-683265952295.us-central1.run.app';
 
@@ -601,64 +602,6 @@ export default function DashboardPage() {
 // COMPONENTS
 // ═══════════════════════════════════════════════════════════════════
 
-function AuthInput({ label, value, onChange, type = 'text', hint }: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; hint?: string;
-}) {
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#9a9a9a', marginBottom: 6, fontFamily: "'Inter', sans-serif" }}>{label}</label>
-      <input
-        type={type} value={value} onChange={e => onChange(e.target.value)}
-        placeholder={hint || ''}
-        style={{
-          width: '100%', padding: '12px 14px', borderRadius: 10,
-          border: '1px solid #1a2515', background: '#060a06', color: '#e8e8e8',
-          fontSize: 14, fontFamily: "'Inter', sans-serif", transition: 'all 0.15s',
-        }}
-      />
-    </div>
-  );
-}
-
-function KpiCard({ icon, label, value, color = '#e8e8e8', sub }: {
-  icon: string; label: string; value: any; color?: string; sub?: string;
-}) {
-  return (
-    <div style={{
-      background: '#0c120c', borderRadius: 14, padding: 20, border: '1px solid #1a2515',
-      transition: 'border 0.2s',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ fontSize: 28 }}>{icon}</div>
-      </div>
-      <div style={{ fontSize: 11, color: '#555', textTransform: 'uppercase', letterSpacing: 1, marginTop: 10, marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, color, fontFamily: "'Space Grotesk', sans-serif" }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: '#555', marginTop: 4 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function Sparkline({ data, color, width = 100, height = 24 }: { data: number[]; color: string; width?: number; height?: number }) {
-  if (!data || data.length < 2) return null;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width;
-    const y = height - ((v - min) / range) * height;
-    return `${x},${y}`;
-  }).join(' ');
-  const lastVal = data[data.length - 1];
-  const lastX = width;
-  const lastY = height - ((lastVal - min) / range) * height;
-  return (
-    <svg width={width} height={height} style={{ display: 'block' }}>
-      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={lastX} cy={lastY} r={2} fill={color} />
-    </svg>
-  );
-}
-
 function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detailed?: boolean; sparkline?: { temp: number[]; humedad: number[]; biomasa: number[] } }) {
   const temp = cesta.ultimaTemp;
   const hum = cesta.ultimaHumedad;
@@ -897,40 +840,6 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
     </div>
   );
 }
-
-function EmptyState({ icon, title, text }: { icon: string; title: string; text: string }) {
-  return (
-    <div style={{
-      textAlign: 'center', padding: 64,
-      background: '#0c120c', borderRadius: 16, border: '1px solid #1a2515',
-    }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>{icon}</div>
-      <div style={{ fontSize: 16, fontWeight: 600, color: '#9a9a9a', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 14, color: '#555' }}>{text}</div>
-    </div>
-  );
-}
-
-// ── Shared styles ───────────────────────────────────────────────────
-const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 12, fontWeight: 500, color: '#9a9a9a', marginBottom: 6, fontFamily: "'Inter', sans-serif",
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '12px 14px', borderRadius: 10,
-  border: '1px solid #1a2515', background: '#060a06', color: '#e8e8e8',
-  fontSize: 14, fontFamily: "'Inter', sans-serif",
-};
-
-const errorStyle: React.CSSProperties = {
-  color: '#ff5a5a', fontSize: 13, marginTop: 16, padding: '10px 14px',
-  background: 'rgba(255,90,90,0.08)', borderRadius: 10, border: '1px solid rgba(255,90,90,0.15)',
-};
-
-const successStyle: React.CSSProperties = {
-  color: '#3eb002', fontSize: 13, marginTop: 16, padding: '10px 14px',
-  background: 'rgba(62,176,2,0.08)', borderRadius: 10, border: '1px solid rgba(62,176,2,0.15)',
-};
 
 // ═══════════════════════════════════════════════════════════════════
 // SETTINGS PANEL
