@@ -69,6 +69,10 @@ npm run dev
 - **Diana Paola Contreras Sanchez** — Lab & Production Data
 - **Robespierre Reinaldo Carrillo Arias** — Legal & Logistics
 
+## Colaboración técnica
+
+- **Franklin J. Bryant IV** — Prospyr 305 / ALBS — Arquitectura de sistemas de IA, backend SaaS, despliegue en Google Cloud Run, motor de categorías, integración de pagos (USDT/VES) y seguridad.
+
 ---
 
 *Desarrollado bajo estándares de grado industrial para el desafío global Build with Gemini XPRIZE.*
