@@ -78,7 +78,12 @@ function getGenai(): GoogleGenAI {
   return _genai;
 }
 
-async function callGemini(prompt: string): Promise<string> {
+async function callGemini(prompt: string): Promise<{
+  text: string;
+  model?: string;
+  usage?: unknown;
+  reason?: string;
+}> {
   try {
     const ai = getGenai();
     const res = await ai.models.generateContent({
@@ -86,10 +91,19 @@ async function callGemini(prompt: string): Promise<string> {
       contents: prompt,
       config: { temperature: 0.3, maxOutputTokens: 500 },
     });
-    return res.text || 'Sin respuesta del modelo.';
+    return {
+      text: res.text || 'Sin respuesta del modelo.',
+      model: (res as any).modelVersion || GEMINI_MODEL,
+      usage: (res as any).usageMetadata,
+    };
   } catch (err: any) {
     console.error('[CEREBRO] Gemini call error:', err?.message || err);
-    return 'Modo demo — no se pudo conectar con Gemini. El sistema está operando correctamente.';
+    // Return a legible reason code (not the raw message — messages can leak project detail).
+    const reason = (err as any)?.status || (err as any)?.code || 'UNKNOWN';
+    return {
+      text: 'No se pudo conectar con Gemini. El sistema está operando correctamente.',
+      reason: String(reason),
+    };
   }
 }
 
@@ -237,13 +251,15 @@ router.post('/gemini-diagnostic', async (req: Request, res: Response) => {
       `Pregunta del operador: ${pregunta}`,
       'Proporciona un diagnóstico breve y accionable (máx 3-4 frases) en español.',
     ].join('\n');
-    const diagnostico = await callGemini(prompt);
+    const result = await callGemini(prompt);
     res.json({
       resultado: {
         cesta_id: cestaId,
-        diagnostico,
-        modelo: GEMINI_MODEL,
-        demo: !GEMINI_API_KEY,
+        diagnostico: result.text,
+        modelo: result.model || GEMINI_MODEL,
+        demo: false, // real Gemini call via ADC (no API key)
+        ...(result.usage ? { usage: result.usage } : {}),
+        ...(result.reason ? { reason: result.reason } : {}),
       },
       cestaId,
     });
