@@ -40,7 +40,7 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 def verify_key(x_cerebro_key: str | None = Header(None)) -> str:
     """Verifica la API key del Sandbox."""
     if not CEREBRO_API_KEY:
-        return "dev"  # Modo desarrollo
+        raise HTTPException(status_code=503, detail="CEREBRO_API_KEY no configurada.")
     if not x_cerebro_key or x_cerebro_key != CEREBRO_API_KEY:
         raise HTTPException(status_code=401, detail="API key requerida.")
     return x_cerebro_key
@@ -243,7 +243,7 @@ async def gemini_diagnostic(
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                params={"key": GEMINI_API_KEY},
+                headers={"x-goog-api-key": GEMINI_API_KEY},
                 json={
                     "contents": [
                         {"role": "user", "parts": [{"text": f"{system_prompt}\n\n{user_content}"}]}
