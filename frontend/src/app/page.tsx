@@ -50,6 +50,7 @@ export default function DashboardPage() {
   const [payConfirmed, setPayConfirmed] = useState(false);
   const [tab, setTab] = useState<'resumen' | 'cestas' | 'lotes' | 'esg' | 'facturacion' | 'ajustes'>('resumen');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   useEffect(() => {
     // Fetch public stats for login screen
@@ -107,6 +108,7 @@ export default function DashboardPage() {
   };
 
   const handleRegister = async () => {
+    if (!acceptedTerms) { setError('Debes aceptar los Términos, la Política de Privacidad y el NDA para crear tu cuenta.'); return; }
     setLoading(true); setError('');
     try {
       const res = await fetch(`${API_URL}/api/v1/auth/register`, {
@@ -117,6 +119,13 @@ export default function DashboardPage() {
       if (res.ok && data.token) {
         localStorage.setItem('biosustain_token', data.token);
         setToken(data.token); setCliente(data.cliente);
+        // Click-wrap NDA acceptance — surface the existing /api/v1/nda/accept
+        // route so the terms are recorded on registration.
+        try {
+          await fetch(`${API_URL}/api/v1/nda/accept`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.token}` },
+          });
+        } catch {}
         setView('dashboard'); loadDashboard(data.token);
       } else { setError(data.error || 'Error al registrarse'); }
     } catch { setError('No se pudo conectar al servidor'); }
@@ -175,7 +184,7 @@ export default function DashboardPage() {
                 BioSustain — bioconversión <span style={{ color: C.green }}>inteligente</span> y sostenible
               </h1>
               <p style={{ fontSize: 14, color: C.text2, lineHeight: 1.5, textShadow: '0 2px 8px rgba(0,0,0,0.8)' }}>
-                Monitoreo en tiempo real, proyección de biomasa y reportes ESG certificados.
+                Monitoreo en tiempo real, proyección de biomasa y estimaciones ESG.
               </p>
               <div style={{ display: 'flex', gap: 20, marginTop: 20 }}>
                 <div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, fontFamily: C.fontDisplay }}>{publicStats.cestas}</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase', letterSpacing: 0.5 }}>Cestas</div></div>
@@ -207,6 +216,28 @@ export default function DashboardPage() {
               )}
               <AuthInput label="Correo electrónico" type="email" value={email} onChange={setEmail} />
               <AuthInput label="Contraseña" type="password" value={password} onChange={setPassword} hint="Mínimo 8 caracteres" />
+
+              {view === 'register' && (
+                <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', margin: '4px 0 16px', fontSize: 12, color: C.text3, cursor: 'pointer', lineHeight: 1.5 }}>
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    style={{ marginTop: 2, accentColor: C.green }}
+                  />
+                  <span>
+                    Acepto los{' '}
+                    <a href={`${API_URL}/api/v1/legal/terminos`} target="_blank" rel="noopener noreferrer" style={{ color: C.green, textDecoration: 'underline' }} onClick={(e) => e.stopPropagation()}>
+                      Términos de Servicio
+                    </a>
+                    {' '}y la{' '}
+                    <a href={`${API_URL}/api/v1/legal/privacidad`} target="_blank" rel="noopener noreferrer" style={{ color: C.green, textDecoration: 'underline' }} onClick={(e) => e.stopPropagation()}>
+                      Política de Privacidad
+                    </a>
+                    , y el Acuerdo de Confidencialidad (NDA).
+                  </span>
+                </label>
+              )}
 
               {error && (
                 <div style={{
@@ -421,7 +452,7 @@ export default function DashboardPage() {
           <div className="animate-in">
             <div className="kpi-grid" style={{ display: 'grid', gap: 16, marginBottom: 24 }}>
               <KpiCard icon="♻️" label="Residuos reconvertidos" value={`${(esg.residuosReconvertidos ?? 0).toFixed(2)} t`} color={C.green} sub="Total acumulado" />
-              <KpiCard icon="🌾" label="Frass certificado" value={`${(esg.frassCertificado ?? 0).toFixed(2)} t`} color={C.green} sub="Biofertilizer producido" />
+              <KpiCard icon="🌾" label="Frass estimado" value={`${(esg.frassCertificado ?? 0).toFixed(2)} t`} color={C.green} sub="Biofertilizer producido" />
               <KpiCard icon="🌍" label="CO₂e reducido" value={`${(esg.co2eReducido ?? 0).toFixed(2)} t`} color={C.green} sub="GEI mitigado" />
               <KpiCard icon="💨" label="Metano evitado" value={`${(esg.metanoEvitado ?? 0).toFixed(2)} t`} color={C.green} sub="CH₄ no emitido" />
             </div>
@@ -430,9 +461,9 @@ export default function DashboardPage() {
             }}>
               <h3 style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 12, fontFamily: C.fontDisplay }}>Metodología</h3>
               <p style={{ fontSize: 13, color: C.text2, lineHeight: 1.7 }}>
-                Las métricas se calculan según metodologías IPCC para mitigación de gases de efecto invernadero (GEI).
+                Las métricas son <strong>estimaciones</strong> calculadas según metodologías IPCC para mitigación de gases de efecto invernadero (GEI).
                 Los datos provienen del registro de lotes orgánicos procesados por bioconversión con <em>Hermetia illucens</em> (BSF).
-                Los reportes están listos para auditorías ambientales, certificaciones y solicitudes de financiamiento.
+                Estos valores son preliminares y no constituyen una certificación de terceros; verifícalos antes de cualquier uso regulatorio.
               </p>
             </div>
           </div>

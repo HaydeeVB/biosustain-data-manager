@@ -10,7 +10,7 @@ Plataforma SaaS para el monitoreo y gestión de operaciones de bioconversión de
 
 - **Motor de 3 categorías de bioconversión** — Plantas/Vegetal, Ganadería/Estercolero, y Larvas BSF (mosca soldado negra), cada una con sus residuos, unidades, parámetros monitoreados y factores ESG propios.
 - **Cálculo de impacto ambiental** — CO₂e reducido y metano evitado por lote, según factores por categoría alineados a metodología IPCC.
-- **Reportes ESG** — métricas de residuos reconvertidos, frass certificado, CO₂e reducido y metano evitado, exportables a PDF.
+- **Reportes ESG** — métricas de residuos reconvertidos, frass estimado, CO₂e reducido y metano evitado, exportables a PDF (estimaciones preliminares, no certificación de terceros).
 - **Registro de lotes** — entrada manual de residuos orgánicos con proyecciones automáticas de biomasa, cosecha y frass.
 - **Suscripciones y pagos** — planes Básico/Pro/Enterprise con pago en **USDT (Binance Pay)** o **Bolívares (Pago Móvil / UbiApp)** con tasa BCV oficial automática.
 - **Dashboard en tiempo real** — monitoreo de cestas (temperatura, humedad), eficiencia del sistema y alertas.

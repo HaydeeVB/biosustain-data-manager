@@ -72,7 +72,7 @@ def P(text, style=tc):
 doc = SimpleDocTemplate('${tmpFile}', pagesize=letter, topMargin=0.7*inch, bottomMargin=0.7*inch, leftMargin=0.8*inch, rightMargin=0.8*inch)
 s = []
 
-s.append(Paragraph('BioSustain — Reporte ESG Certificado', ts))
+s.append(Paragraph('BioSustain — Reporte ESG Preliminar (Estimado)', ts))
 s.append(Spacer(1, 0.15*inch))
 s.append(Paragraph(f"Cliente: {data['client']['nombre']}", bs))
 s.append(Paragraph(f"Empresa: {data['client']['empresa']}", bs))
@@ -117,8 +117,8 @@ else:
     s.append(Paragraph('No hay lotes registrados.', bs))
 
 s.append(Spacer(1, 0.3*inch))
-s.append(Paragraph('Certificación', hs))
-s.append(Paragraph('Este reporte fue generado automáticamente por la plataforma BioSustain. Las métricas se calculan según metodologías IPCC para mitigación de gases de efecto invernadero (GEI). Los datos provienen del registro de lotes orgánicos procesados por bioconversión con Hermetia illucens (BSF).', bs))
+s.append(Paragraph('Metodología y Alcance', hs))
+s.append(Paragraph('Este reporte fue generado automáticamente por la plataforma BioSustain. Las métricas son estimaciones preliminares calculadas según metodologías IPCC para mitigación de gases de efecto invernadero (GEI). No constituyen una certificación de terceros; verifícalos antes de cualquier uso regulatorio o de auditoría. Los datos provienen del registro de lotes orgánicos procesados por bioconversión con Hermetia illucens (BSF).', bs))
 s.append(Spacer(1, 0.2*inch))
 s.append(Paragraph('BioSustain Research Lab — Plataforma de bioconversión sostenible', bs))
 
@@ -142,7 +142,7 @@ print('PDF generated')
 
 function generateTextReport(data: ReportData): string {
   const m = data.metricas;
-  let report = `BioSustain — Reporte ESG\n\n`;
+  let report = `BioSustain — Reporte ESG Preliminar (Estimado)\n\n`;
   report += `Cliente: ${data.client.nombre}\n`;
   report += `Empresa: ${data.client.empresa}\n`;
   report += `Fecha: ${data.fecha}\n\n`;

@@ -258,6 +258,7 @@ router.post('/gemini-diagnostic', async (req: Request, res: Response) => {
         diagnostico: result.text,
         modelo: result.model || GEMINI_MODEL,
         demo: false, // real Gemini call via ADC (no API key)
+        disclaimer: 'Estimaciones generadas por IA; no certificadas por terceros. Verifica antes de uso regulatorio.',
         ...(result.usage ? { usage: result.usage } : {}),
         ...(result.reason ? { reason: result.reason } : {}),
       },

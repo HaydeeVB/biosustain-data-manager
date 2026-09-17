@@ -117,6 +117,10 @@ app.get('/api/v1/public/stats', async (_req: any, res: any) => {
 import ndaRoutes from './routes/nda';
 app.use('/api/v1/nda', ndaRoutes);
 
+// Legal documents (public) — privacy policy + terms of service
+import legalRoutes from './routes/legal';
+app.use('/api/v1/legal', legalRoutes);
+
 // Protected routes (require JWT)
 import { authenticateToken } from './middleware/auth';
 import { auditLog } from './middleware/audit';

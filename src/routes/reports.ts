@@ -3,11 +3,11 @@
  *
  * GET /api/v1/reports/esg/:clienteId → PDF con métricas ESG + trazabilidad
  *
- * Genera un PDF certificado con:
+ * Genera un PDF preliminar (estimado) con:
  * - Métricas de bioconversión (residuos, frass, CO2e)
  * - Historial de lotes procesados
  * - Trazabilidad por cesta
- * - Listo para auditorías y certificaciones
+ * - Metodologías IPCC, sin certificación de terceros
  */
 import { Router, Request, Response } from 'express';
 import { query, isDbConfigured } from '../db';
