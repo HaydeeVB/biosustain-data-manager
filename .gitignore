@@ -7,3 +7,5 @@ coverage/
 .env.production
 .env*
 !.env.example
+frontend/tsconfig.tsbuildinfo
+frontend/.next
