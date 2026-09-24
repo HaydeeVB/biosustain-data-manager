@@ -28,6 +28,10 @@ router.get('/', async (req: Request, res: Response) => {
                  WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultima_temp,
                 (SELECT t.humedad_relativa FROM telemetria_cestas t
                  WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultima_humedad,
+                (SELECT t.co2_ppm FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultimo_co2,
+                (SELECT t.niveles_nh3_ppm FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultimo_nh3,
                 (SELECT t.biomasa_larvaria_estimada_kg FROM telemetria_cestas t
                  WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultima_biomasa
          FROM cestas c
@@ -43,6 +47,8 @@ router.get('/', async (req: Request, res: Response) => {
         fechaInstalacion: r.fecha_instalacion,
         ultimaTemp: r.ultima_temp ? parseFloat(r.ultima_temp) : null,
         ultimaHumedad: r.ultima_humedad ? parseFloat(r.ultima_humedad) : null,
+        ultimoCo2: r.ultimo_co2 ? parseFloat(r.ultimo_co2) : null,
+        ultimoNh3: r.ultimo_nh3 ? parseFloat(r.ultimo_nh3) : null,
         ultimaBiomasa: r.ultima_biomasa ? parseFloat(r.ultima_biomasa) : null,
       }));
 
@@ -142,11 +148,11 @@ router.get('/sparklines/all', async (req: Request, res: Response) => {
       [clienteId]
     );
 
-    const sparklines: Record<string, { temp: number[]; humedad: number[]; biomasa: number[] }> = {};
+    const sparklines: Record<string, { temp: number[]; humedad: number[]; co2: number[]; nh3: number[]; biomasa: number[] }> = {};
 
     for (const cesta of cestasResult.rows) {
       const result = await query(
-        `SELECT temp_ambiente, humedad_relativa, biomasa_larvaria_estimada_kg
+        `SELECT temp_ambiente, humedad_relativa, co2_ppm, niveles_nh3_ppm, biomasa_larvaria_estimada_kg
          FROM telemetria_cestas
          WHERE cesta_id = $1
          ORDER BY timestamp DESC
@@ -158,6 +164,8 @@ router.get('/sparklines/all', async (req: Request, res: Response) => {
       sparklines[cesta.id] = {
         temp: rows.map((r: any) => parseFloat(r.temp_ambiente || 0)),
         humedad: rows.map((r: any) => parseFloat(r.humedad_relativa || 0)),
+        co2: rows.map((r: any) => parseFloat(r.co2_ppm || 0)),
+        nh3: rows.map((r: any) => parseFloat(r.niveles_nh3_ppm || 0)),
         biomasa: rows.map((r: any) => parseFloat(r.biomasa_larvaria_estimada_kg || 0)),
       };
     }

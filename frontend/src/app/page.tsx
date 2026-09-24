@@ -41,7 +41,7 @@ export default function DashboardPage() {
   const [plans, setPlans] = useState<any>(null);
   const [subscription, setSubscription] = useState<any>(null);
   const [lotes, setLotes] = useState<any[]>([]);
-  const [sparklines, setSparklines] = useState<Record<string, { temp: number[]; humedad: number[]; biomasa: number[] }>>({});
+  const [sparklines, setSparklines] = useState<Record<string, { temp: number[]; humedad: number[]; co2: number[]; nh3: number[]; biomasa: number[] }>>({});
   const [publicStats, setPublicStats] = useState({ cestas: 0, eficiencia: 0, co2e: 0 });
   const [cliente, setCliente] = useState<any>(null);
   const [pendingPayment, setPendingPayment] = useState<any>(null);
@@ -633,9 +633,11 @@ export default function DashboardPage() {
 // COMPONENTS
 // ═══════════════════════════════════════════════════════════════════
 
-function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detailed?: boolean; sparkline?: { temp: number[]; humedad: number[]; biomasa: number[] } }) {
+function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detailed?: boolean; sparkline?: { temp: number[]; humedad: number[]; co2: number[]; nh3: number[]; biomasa: number[] } }) {
   const temp = cesta.ultimaTemp;
   const hum = cesta.ultimaHumedad;
+  const co2 = cesta.ultimoCo2;
+  const nh3 = cesta.ultimoNh3;
   const hasAlert = (temp && temp > 32) || (hum && hum < 50);
 
   return (
@@ -652,8 +654,8 @@ function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detaile
         }}>{cesta.estado || 'activa'}</span>
       </div>
       <div style={{ fontSize: 12, color: '#9a9a9a', marginBottom: 14 }}>📍 {cesta.ubicacion || 'Sin ubicación'}</div>
-      {(temp !== null || hum !== null) && (
-        <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+      {(temp !== null || hum !== null || co2 !== null || nh3 !== null) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 13 }}>
           <div>
             <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>Temp</div>
             <div style={{ fontWeight: 600, color: temp > 32 ? '#e8a000' : '#3eb002' }}>{temp ? `${temp.toFixed(1)}°C` : '—'}</div>
@@ -661,6 +663,14 @@ function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detaile
           <div>
             <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>Humedad</div>
             <div style={{ fontWeight: 600, color: hum < 50 ? '#e8a000' : '#3eb002' }}>{hum ? `${hum.toFixed(0)}%` : '—'}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>CO₂</div>
+            <div style={{ fontWeight: 600, color: co2 && co2 > 1200 ? '#e8a000' : '#3eb002' }}>{co2 ? `${co2.toFixed(0)} ppm` : '—'}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>NH₃</div>
+            <div style={{ fontWeight: 600, color: nh3 && nh3 > 30 ? '#e8a000' : '#3eb002' }}>{nh3 ? `${nh3.toFixed(1)} ppm` : '—'}</div>
           </div>
           {detailed && cesta.ultimaBiomasa && (
             <div>
@@ -671,7 +681,7 @@ function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detaile
         </div>
       )}
       {sparkline && (sparkline.temp.length > 1 || sparkline.humedad.length > 1) && (
-        <div style={{ display: 'flex', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid #1a2515' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid #1a2515' }}>
           {sparkline.temp.length > 1 && (
             <div>
               <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>Temp</div>
@@ -682,6 +692,18 @@ function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detaile
             <div>
               <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>Humedad</div>
               <Sparkline data={sparkline.humedad} color={hum < 50 ? '#e8a000' : '#3eb002'} width={80} height={20} />
+            </div>
+          )}
+          {sparkline.co2 && sparkline.co2.length > 1 && (
+            <div>
+              <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>CO₂</div>
+              <Sparkline data={sparkline.co2} color={co2 && co2 > 1200 ? '#e8a000' : '#3eb002'} width={80} height={20} />
+            </div>
+          )}
+          {sparkline.nh3 && sparkline.nh3.length > 1 && (
+            <div>
+              <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>NH₃</div>
+              <Sparkline data={sparkline.nh3} color={nh3 && nh3 > 30 ? '#e8a000' : '#3eb002'} width={80} height={20} />
             </div>
           )}
           {detailed && sparkline.biomasa.length > 1 && (

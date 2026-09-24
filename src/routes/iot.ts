@@ -100,9 +100,9 @@ router.post('/metrics', authenticateApiKey, async (req: Request, res: Response) 
       await query(
         `INSERT INTO telemetria_cestas
          (timestamp, cesta_id, planta_id, temp_ambiente, humedad_relativa,
-          temp_interna_sustrato, niveles_nh3_ppm, degradacion_residuo_kg,
+          temp_interna_sustrato, niveles_nh3_ppm, co2_ppm, degradacion_residuo_kg,
           biomasa_larvaria_estimada_kg, aspersor_activo, extractor_activo)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           ts,
           data.cesta_id,
@@ -111,6 +111,7 @@ router.post('/metrics', authenticateApiKey, async (req: Request, res: Response) 
           data.sensores.humedad_sustrato_pct,
           data.sensores.temperatura_sustrato_c,
           data.sensores.amoniaco_ppm,
+          data.sensores.co2_ppm,
           null, // degradacion_residuo_kg — se calcula luego
           null, // biomasa_larvaria_estimada_kg — se calcula luego
           data.actuadores?.aspersor_auto_status === 1,
