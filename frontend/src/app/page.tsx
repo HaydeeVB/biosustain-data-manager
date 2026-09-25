@@ -744,10 +744,13 @@ function LoteCard({ lote }: { lote: any }) {
   );
 }
 
+const RESIDUO_OTRO = 'Otro (especificar)';
+
 function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] }) {
   const [categoria, setCategoria] = useState('plantas');
   const [categorias, setCategorias] = useState<any[]>([]);
   const [tipoResiduo, setTipoResiduo] = useState('');
+  const [residuoOtro, setResiduoOtro] = useState('');
   const [pesoKg, setPesoKg] = useState('');
   const [unidad, setUnidad] = useState('');
   const [cestaId, setCestaId] = useState('');
@@ -766,6 +769,10 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
 
   const activeCat = categorias.find((c) => c.id === categoria);
 
+  // "Otro (especificar)" needs a free-text box, or the choice is unrecordable.
+  const isOtro = tipoResiduo === RESIDUO_OTRO;
+  const residuoFinal = isOtro ? residuoOtro.trim() : tipoResiduo;
+
   const handleSubmit = async () => {
     setLoading(true); setError(''); setSuccess('');
     try {
@@ -775,17 +782,17 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
         body: JSON.stringify({
           categoria,
           cestaId: categoria === 'larvas' ? cestaId : undefined, // cestas only for BSF
-          tipoResiduo,
+          tipoResiduo: residuoFinal,
           pesoKg: parseFloat(pesoKg),
           unidadPrincipal: unidad || undefined,
           tipoSustrato,
-          residuoTipo: tipoResiduo,
+          residuoTipo: residuoFinal,
         }),
       });
       const data = await res.json();
       if (res.ok) {
         setSuccess(`Lote registrado: ${data.lote.biomasaEstimadaKg} kg biomasa, ${data.lote.co2eReducidoKg} kg CO₂e, ${data.lote.metanoEvitadoKg} kg CH₄ evitado`);
-        setTipoResiduo(''); setPesoKg(''); onCreated();
+        setTipoResiduo(''); setResiduoOtro(''); setPesoKg(''); onCreated();
       } else { setError(data.error || 'Error al registrar lote'); }
     } catch { setError('No se pudo conectar al servidor'); }
     setLoading(false);
@@ -855,6 +862,13 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
             <input value={tipoResiduo} onChange={e => setTipoResiduo(e.target.value)} placeholder="Tipo de residuo" style={inputStyle} />
           )}
         </div>
+        {isOtro && (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Especificar tipo de residuo</label>
+            <input value={residuoOtro} onChange={e => setResiduoOtro(e.target.value)}
+              placeholder="Ej. Bagazo de caña, residuo de cervecería…" style={inputStyle} />
+          </div>
+        )}
         {categoria === 'larvas' && (
           <div>
             <label style={labelStyle}>Sustrato</label>
@@ -883,7 +897,7 @@ function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] 
       {error && <div style={errorStyle}>⚠️ {error}</div>}
       {success && <div style={successStyle}>✓ {success}</div>}
 
-      <button onClick={handleSubmit} disabled={loading || !tipoResiduo || !pesoKg || (categoria === 'larvas' && !cestaId)} style={{
+      <button onClick={handleSubmit} disabled={loading || !residuoFinal || (isOtro && residuoOtro.trim().length < 2) || !pesoKg || (categoria === 'larvas' && !cestaId)} style={{
         padding: '12px 28px', borderRadius: 12, border: 'none', cursor: loading ? 'wait' : 'pointer',
         background: '#3eb002', color: '#060a06', fontSize: 14, fontWeight: 700, fontFamily: "'Inter', sans-serif",
         marginTop: 16, boxShadow: '0 4px 14px rgba(62,176,2,0.25)', opacity: loading ? 0.6 : 1,
