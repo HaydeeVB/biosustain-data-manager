@@ -72,9 +72,10 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Límite propio de la ingesta IoT. Se cuenta por API key (una key por nodo),
-// nunca por IP. Techo alto a propósito: 6 lecturas/min por nodo = 8.640/día,
-// así que 60.000/día deja margen para ~6 nodos detrás de una sola conexión.
+// Límite propio de la ingesta IoT. Se cuenta POR NODO (device_id), resuelto por
+// el middleware iotAuth desde la API key — nunca por IP, porque varias cestas
+// comparten router en la planta. Techo alto a propósito: 6 lecturas/min por nodo
+// = 8.640/día, así que 60.000/día deja margen amplio por dispositivo.
 const iotLimiter = rateLimit({
   windowMs: 24 * 60 * 60 * 1000,
   max: parseInt(process.env.IOT_RATE_LIMIT_MAX || '60000', 10),
@@ -84,10 +85,13 @@ const iotLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // La IP del ESP32 no identifica al nodo: varios comparten router en la nave.
+  // Cada nodo tiene su propio presupuesto. Con claves por nodo (iot_devices)
+  // esto ya no se reparte entre cestas.
   keyGenerator: (req: Request) => {
+    const deviceId = req.iotDeviceId || (req.body?.device_id as string);
+    if (deviceId) return `iot-dev:${deviceId}`;
     const apiKey = req.header('X-API-Key');
-    return apiKey ? `iot:${apiKey}` : `iot-ip:${req.ip}`;
+    return apiKey ? `iot-key:${apiKey}` : `iot-ip:${req.ip}`;
   },
 });
 

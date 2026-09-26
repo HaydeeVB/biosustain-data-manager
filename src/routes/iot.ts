@@ -26,7 +26,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { authenticateApiKey } from '../middleware/auth';
+import { authenticateIotDevice } from '../middleware/iotAuth';
 import { query, isDbConfigured } from '../db';
 
 const router = Router();
@@ -74,7 +74,7 @@ const evaluateBioreactorMetrics = (temp: number | undefined, humidity: number | 
  * Recibe telemetría de un ESP32 y la almacena en TimescaleDB.
  * Devuelve decisión de control del aspersor (compatibilidad con firmware existente).
  */
-router.post('/metrics', authenticateApiKey, async (req: Request, res: Response) => {
+router.post('/metrics', authenticateIotDevice, async (req: Request, res: Response) => {
   const parseResult = metricSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({
