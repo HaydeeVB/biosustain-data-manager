@@ -48,8 +48,20 @@ app.use(cors({
 // Parseo de JSON con límite de tamaño (prevenir payloads maliciosos)
 app.use(express.json({ limit: '100kb' }));
 
-// Rate limiting — anti-scraping (100 requests por 15 min por IP)
-const limiter = rateLimit({
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+//
+// FIX (2026-09-26): hasta hoy el ÚNICO limitador era global y por IP
+// (100 req / 15 min). Una cesta enviando cada 10 s consume 8.640 req/día,
+// así que la PRIMERA cesta ya rozaba el techo y la SEGUNDA detrás de la misma
+// conexión quedaba bloqueada con 429 — la telemetría se perdía en silencio.
+// Reproducido en vivo: primer 429 en la petición #96.
+//
+// El comentario viejo de iot.ts decía "1 request por 10 segundos por
+// dispositivo"; eso nunca se implementó. Ahora sí: el limitador general se
+// aplica a TODA la API EXCEPTO /api/v1/iot/, que tiene su propio límite
+// generoso por device_id (no por IP, porque varias cestas comparten salida
+// a internet en la planta).
+const apiLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
   message: {
@@ -59,7 +71,33 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use('/api/', limiter);
+
+// Límite propio de la ingesta IoT. Se cuenta por API key (una key por nodo),
+// nunca por IP. Techo alto a propósito: 6 lecturas/min por nodo = 8.640/día,
+// así que 60.000/día deja margen para ~6 nodos detrás de una sola conexión.
+const iotLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: parseInt(process.env.IOT_RATE_LIMIT_MAX || '60000', 10),
+  message: {
+    error: 'Límite de ingesta IoT excedido para este dispositivo.',
+    code: 'IOT_RATE_LIMIT_EXCEEDED',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // La IP del ESP32 no identifica al nodo: varios comparten router en la nave.
+  keyGenerator: (req: Request) => {
+    const apiKey = req.header('X-API-Key');
+    return apiKey ? `iot:${apiKey}` : `iot-ip:${req.ip}`;
+  },
+});
+
+// La ingesta IoT va PRIMERO, con su propio limitador...
+app.use('/api/v1/iot/', iotLimiter);
+// ...y queda excluida del limitador general (si no, se aplicarían los dos).
+app.use('/api/', (req, res, next) => {
+  if (req.path.startsWith('/v1/iot/')) return next();
+  return apiLimiter(req, res, next);
+});
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
 
