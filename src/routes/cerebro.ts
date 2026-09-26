@@ -116,17 +116,57 @@ async function callCerebro(path: string, body: unknown): Promise<unknown> {
     if (path.includes('biomass')) {
       const data = body as any;
       const dias: number = data.diasAProyectar;
+
+      // FIX (2026-09-26) — la versión anterior crecía sin límite y el sustrato
+      // se volvía NEGATIVO (ej. día 3 = -8.75 kg): una proyección físicamente
+      // imposible. Dos errores:
+      //   1. biomasa = inicial * (1 + 0.18*(i+1)) → interés compuesto, sin tope
+      //   2. sustrato = inicial - inicial*2.5*(i+1) → consume siempre lo mismo,
+      //      ignorando que la biomasa crece y come MÁS cada día
+      // Ahora replica la lógica de cerebro/cerebro_server.py:
+      //   · food_consumed = biomasa * 2.5 * thermal_eff  (escala con la biomasa)
+      //   · food_consumed = min(food_consumed, sustrato)  (nunca más de lo que hay)
+      //   · mortalidad 5%/ciclo de 14 días
+      //   · si el sustrato se agota → hambruna (biomasa * 0.95), nunca negativo
+      const thermalEff = (t: number) =>
+        (t >= 27 && t <= 30) ? 1.0 : Math.max(0.2, 1.0 - 0.08 * Math.abs(28.5 - t));
+      const moistureEff = (h: number) =>
+        (h >= 60 && h <= 70) ? 1.0 : Math.max(0.3, 1.0 - 0.05 * Math.abs(65.0 - h));
+
+      const effT = thermalEff(data.temperaturaPromedio);
+      const effH = moistureEff(data.humedadPromedio);
+      const growthRate = 0.18 * effT * effH;
+      const mortalidadDiaria = 1.0 - (0.05 / 14);
+
+      let biomasa: number = data.biomasaInicialKg;
+      let sustrato: number = data.sustratoInicialKg;
       const proyeccion: any[] = [];
+
       for (let i = 0; i < dias; i++) {
-        const biomasa = (data.biomasaInicialKg * (1 + 0.18 * (i + 1))).toFixed(2);
-        const sustrato = (data.sustratoInicialKg - (data.biomasaInicialKg * 2.5 * (i + 1))).toFixed(2);
-        proyeccion.push({ dia: i + 1, biomasa_estimada_kg: Number(biomasa), sustrato_remanente_kg: Number(sustrato) });
+        if (sustrato > 0) {
+          let consumido = biomasa * 2.5 * effT;
+          consumido = Math.min(consumido, sustrato);   // nunca más de lo disponible
+          biomasa = (biomasa + consumido * growthRate) * mortalidadDiaria;
+          sustrato -= consumido;
+        } else {
+          biomasa *= 0.95;                              // hambruna
+        }
+        proyeccion.push({
+          dia: i + 1,
+          biomasa_estimada_kg: Number(biomasa.toFixed(2)),
+          sustrato_remanente_kg: Number(sustrato.toFixed(2)),
+          eficiencia_termica: Number(effT.toFixed(2)),
+        });
       }
+
       return {
         cesta_id: data.cestaId,
         proyeccion,
-        biomasa_final_kg: Number((data.biomasaInicialKg * (1 + 0.18 * dias)).toFixed(2)),
-        modelo: 'LarvalGrowthTwin v1.0 (demo)',
+        biomasa_final_kg: Number(biomasa.toFixed(2)),
+        sustrato_final_kg: Number(sustrato.toFixed(2)),
+        eficiencia_termica: Number(effT.toFixed(2)),
+        eficiencia_hidrica: Number(effH.toFixed(2)),
+        modelo: 'LarvalGrowthTwin v1.0 (respaldo local — Cerebro no configurado)',
       };
     }
     if (path.includes('water')) {
