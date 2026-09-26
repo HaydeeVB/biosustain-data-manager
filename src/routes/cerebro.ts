@@ -171,16 +171,38 @@ async function callCerebro(path: string, body: unknown): Promise<unknown> {
     }
     if (path.includes('water')) {
       const data = body as any;
-      const projected = data.humedadActual - (data.temperaturaActual * 0.08 * (data.extractorActivo ? 1.4 : 1.0));
-      const deficit = 65.0 - projected;
-      const needsAction = projected < 60.0;
+
+      // FIX (2026-09-26) — dos problemas en el respaldo local:
+      //  1. AUTENTICACIÓN: el Cerebro verifica X-Cerebro-Key, pero se enviaba
+      //     X-API-Key → 401 → caía aquí en silencio. Ya se corrigen ambos headers.
+      //  2. CONTRATO: se enviaban claves camelCase y el Cerebro (Pydantic) espera
+      //     snake_case → habría dado 422 al conectar. Ya se traduce.
+      //  3. CÁLCULO: se restaba la pérdida por evaporación a la humedad ACTUAL en
+      //     cada paso. El modelo R real (predict_sprinkler_activation) hace UNA
+      //     sola proyección a 2 horas — no una serie diaria. El respaldo se alinea:
+      //     un único paso, sin presentar varios días como si fueran válidos.
+      const evap = 0.08;
+      const ventilacion = data.extractorActivo ? 1.4 : 1.0;
+      const target = 65.0;
+
+      const perdida = data.temperaturaActual * evap * ventilacion;
+      let proyectada = data.humedadActual - perdida;
+      if (proyectada < 0) proyectada = 0;
+
+      const deficit = target - proyectada;
+      const needsAction = proyectada < 60.0;
+      const segundos = needsAction ? Math.min(Math.ceil(deficit / 0.4), 45) : 0;
+
       return {
         cesta_id: data.cestaId,
-        humedad_proyectada_pct: +projected.toFixed(2),
+        humedad_proyectada_pct: +proyectada.toFixed(2),
         accion: needsAction ? 'ACTIVAR_ASPERSOR' : 'MANTENER_INACTIVO',
-        duracion_aspersor_seg: needsAction ? Math.min(Math.ceil(deficit / 0.4), 45) : 0,
-        diagnostico: needsAction ? 'Déficit hídrico proyectado' : 'Microclima estable',
-        modelo: 'WaterBalanceTwin v1.0 (demo)',
+        duracion_aspersor_seg: segundos,
+        diagnostico: needsAction
+          ? `Déficit hídrico proyectado de ${deficit.toFixed(2)}% (ventana de 2 h)`
+          : 'Microclima estable dentro del rango óptimo (ventana de 2 h)',
+        ventana_proyeccion_horas: 2,
+        modelo: 'WaterBalanceTwin v1.0 (respaldo local — Cerebro no configurado)',
       };
     }
     if (path.includes('gemini')) {
@@ -197,6 +219,10 @@ async function callCerebro(path: string, body: unknown): Promise<unknown> {
     'Content-Type': 'application/json',
   };
   if (CEREBRO_API_KEY) {
+    // El Cerebro verifica el header X-Cerebro-Key (verify_key() en cerebro_server.py).
+    // Enviar 'X-API-Key' NO autenticaba nunca: el Cerebro respondía 401 y el
+    // llamador caía al respaldo local sin que se notara. Mantener ambos nombres.
+    headers['X-Cerebro-Key'] = CEREBRO_API_KEY;
     headers['X-API-Key'] = CEREBRO_API_KEY;
   }
 
@@ -232,8 +258,18 @@ router.post('/biomass-projection', async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await callCerebro('/model/biomass-projection', parseResult.data);
-    res.json({ resultado: result, cestaId: parseResult.data.cestaId });
+    // El Cerebro espera snake_case (BiomassProjectionRequest en cerebro_server.py);
+    // el schema del Sandbox usa camelCase. Traducir explícitamente.
+    const d = parseResult.data;
+    const result = await callCerebro('/model/biomass-projection', {
+      cesta_id: d.cestaId,
+      biomasa_inicial_kg: d.biomasaInicialKg,
+      sustrato_inicial_kg: d.sustratoInicialKg,
+      temperatura_promedio: d.temperaturaPromedio,
+      humedad_promedio: d.humedadPromedio,
+      dias_a_proyectar: d.diasAProyectar,
+    });
+    res.json({ resultado: result, cestaId: d.cestaId });
   } catch (err) {
     console.error('[CEREBRO] Error en biomass-projection:', err);
     res.status(502).json({
@@ -258,8 +294,15 @@ router.post('/water-balance', async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await callCerebro('/model/water-balance', parseResult.data);
-    res.json({ resultado: result, cestaId: parseResult.data.cestaId });
+    // El Cerebro espera snake_case (WaterBalanceRequest en cerebro_server.py).
+    const d = parseResult.data;
+    const result = await callCerebro('/model/water-balance', {
+      cesta_id: d.cestaId,
+      humedad_actual: d.humedadActual,
+      temperatura_actual: d.temperaturaActual,
+      extractor_activo: d.extractorActivo,
+    });
+    res.json({ resultado: result, cestaId: d.cestaId });
   } catch (err) {
     console.error('[CEREBRO] Error en water-balance:', err);
     res.status(502).json({ error: 'Error del motor.', code: 'CEREBRO_ERROR' });

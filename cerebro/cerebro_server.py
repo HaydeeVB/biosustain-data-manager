@@ -31,19 +31,29 @@ from pydantic import BaseModel, Field
 app = FastAPI(title="BioSustain Cerebro", version="0.1.0")
 
 CEREBRO_API_KEY = os.getenv("CEREBRO_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GCP_PROJECT = os.getenv("GCP_PROJECT", "caramelo33")
+GCP_LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 
 # ── Autenticación ─────────────────────────────────────────────────────────────
 
 
-def verify_key(x_cerebro_key: str | None = Header(None)) -> str:
-    """Verifica la API key del Sandbox."""
+def verify_key(
+    x_cerebro_key: str | None = Header(None),
+    x_api_key: str | None = Header(None),
+) -> str:
+    """Verifica la API key del Sandbox.
+
+    Acepta X-Cerebro-Key (nombre documentado) y X-API-Key (el que enviaba el
+    Sandbox). Antes solo aceptaba X-Cerebro-Key, así que el Sandbox recibía 401
+    en cada llamada y caía a su respaldo local sin que se notara.
+    """
     if not CEREBRO_API_KEY:
         raise HTTPException(status_code=503, detail="CEREBRO_API_KEY no configurada.")
-    if not x_cerebro_key or x_cerebro_key != CEREBRO_API_KEY:
+    provided = x_cerebro_key or x_api_key
+    if not provided or provided != CEREBRO_API_KEY:
         raise HTTPException(status_code=401, detail="API key requerida.")
-    return x_cerebro_key
+    return provided
 
 
 # ── Modelos de entrada ───────────────────────────────────────────────────────
@@ -71,9 +81,45 @@ class GeminiDiagnosticRequest(BaseModel):
     pregunta: str = Field(max_length=500)
 
 
+# ── Cliente Gemini (Vertex AI vía ADC) ───────────────────────────────────────
+# Mismo enfoque que el Sandbox: véase src/routes/cerebro.ts getGenai().
+# Requiere que el service account tenga el scope cloud-platform (Cloud Run lo
+# otorga por defecto). Sin API key.
+
+_genai_client: Any | None = None
+_genai_error: str | None = None
+
+
+def _get_genai() -> Any:
+    """Devuelve el cliente google-genai (Vertex AI), creándolo una sola vez."""
+    global _genai_client, _genai_error
+    if _genai_client is not None:
+        return _genai_client
+    try:
+        from google import genai
+
+        _genai_client = genai.Client(
+            vertexai=True,
+            project=GCP_PROJECT,
+            location=GCP_LOCATION,
+        )
+        return _genai_client
+    except Exception as exc:  # pragma: no cover
+        _genai_error = str(exc)
+        raise
+
+
+def _genai_available() -> bool:
+    """True si el SDK de Gemini está instalado y el cliente puede construirse."""
+    try:
+        _get_genai()
+        return True
+    except Exception:
+        return False
+
+
 # ── Modelo 1: Crecimiento larvario (Python — LarvalGrowthTwin) ──────────────
 # Basado en el código del equipo: SOFWARE/code-1784482159142.py
-
 
 def simulate_larval_growth(
     biomasa_inicial: float,
@@ -171,7 +217,8 @@ async def health(_key: str = Header(None)):
         "status": "ok",
         "service": "biosustain-cerebro",
         "version": "0.1.0",
-        "gemini_configured": bool(GEMINI_API_KEY),
+        "gemini_configured": _genai_available(),
+        "auth_mode": "vertex-adc",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -218,15 +265,20 @@ async def water_balance(
 async def gemini_diagnostic(
     req: GeminiDiagnosticRequest, _key: str = Depends(verify_key)
 ):
-    """Diagnóstico predictivo usando Gemini API."""
-    if not GEMINI_API_KEY:
+    """Diagnóstico predictivo usando Gemini (Vertex AI vía ADC).
+
+    Usa el SDK google-genai en modo Vertex AI con las credenciales del service
+    account de Cloud Run — NO requiere API key. Esto replica el enfoque del
+    Sandbox (src/routes/cerebro.ts), que es el que funciona en producción: la
+    política de la organización bloquea las claves 'AQ.' de service account, y
+    el token por defecto de Cloud Run no tiene el scope de la Gemini Developer API.
+    """
+    if not _genai_available():
         return {
             "cesta_id": req.cesta_id,
-            "diagnostico": "Gemini API no configurada. Modo demo.",
+            "diagnostico": "Motor de IA no disponible en este entorno.",
             "demo": True,
         }
-
-    import httpx
 
     system_prompt = (
         "Eres el asistente de BioSustain Data-Manager. Analizas métricas "
@@ -240,36 +292,29 @@ async def gemini_diagnostic(
     )
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                headers={"x-goog-api-key": GEMINI_API_KEY},
-                json={
-                    "contents": [
-                        {"role": "user", "parts": [{"text": f"{system_prompt}\n\n{user_content}"}]}
-                    ],
-                    "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024},
-                },
-            )
-
-        if resp.status_code != 200:
-            return {
-                "cesta_id": req.cesta_id,
-                "diagnostico": f"Error de Gemini API: {resp.status_code}",
-            }
-
-        data = resp.json()
-        texto = data["candidates"][0]["content"]["parts"][0]["text"]
+        client = _get_genai()
+        respuesta = await client.aio.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=f"{system_prompt}\n\n{user_content}",
+            config={"temperature": 0.7, "max_output_tokens": 1024},
+        )
+        texto = respuesta.text
         return {
             "cesta_id": req.cesta_id,
             "diagnostico": texto,
             "modelo": GEMINI_MODEL,
+            "demo": False,
+            "disclaimer": (
+                "Estimaciones generadas por IA; no certificadas por terceros. "
+                "Verifica antes de uso regulatorio."
+            ),
         }
 
     except Exception as exc:
         return {
             "cesta_id": req.cesta_id,
-            "diagnostico": f"Error: {exc}",
+            "diagnostico": f"Error del motor de IA: {exc}",
+            "demo": True,
         }
 
 
