@@ -6,12 +6,90 @@
  * GET  /api/v1/cestas/:id/metrics → telemetría de una cesta
  */
 import { Router, Request, Response } from 'express';
+import { randomBytes, createHash } from 'crypto';
 import { query, isDbConfigured } from '../db';
 
 const router = Router();
 
 // In-memory fallback
 const cestasEnMemoria = new Map<string, any>();
+
+/**
+ * POST /api/v1/cestas — crear una cesta y emitir su llave de nodo IoT.
+ *
+ * Antes de 2026-10-24 no existía forma de crear una cesta por API ni por la UI:
+ * el cliente quedaba con las 4 de demostración y no podía registrar la suya.
+ *
+ * Devuelve la API key del nodo UNA SOLA VEZ (se guarda solo el sha256 en
+ * `iot_devices`). Si se pierde, hay que emitir otra.
+ */
+router.post('/', async (req: Request, res: Response) => {
+  const clienteId = (req as any).cliente?.clienteId;
+  if (!clienteId) {
+    res.status(401).json({ error: 'No autenticado.', code: 'NOT_AUTHENTICATED' });
+    return;
+  }
+
+  const ubicacion = String(req.body?.ubicacion || '').trim();
+  if (ubicacion.length < 2 || ubicacion.length > 200) {
+    res.status(400).json({ error: 'Indique una ubicación (2–200 caracteres).', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  const sufijo = randomBytes(3).toString('hex').toUpperCase();
+  const cestaId = String(req.body?.id || `CESTA-${sufijo}`).slice(0, 100);
+  const deviceId = String(req.body?.device_id || `NODO-${cestaId}`).slice(0, 100);
+  const fecha = req.body?.fecha_instalacion ? new Date(req.body.fecha_instalacion) : new Date();
+
+  if (!isDbConfigured()) {
+    res.status(503).json({ error: 'Base de datos no configurada.', code: 'DB_NOT_CONFIGURED' });
+    return;
+  }
+
+  try {
+    await query(
+      `INSERT INTO cestas (id, cliente_id, ubicacion, fecha_instalacion, activa)
+       VALUES ($1, $2, $3, $4, true)`,
+      [cestaId, clienteId, ubicacion, fecha],
+    );
+  } catch (err: any) {
+    const duplicada = String(err?.code) === '23505';
+    res.status(duplicada ? 409 : 500).json({
+      error: duplicada ? 'Ya existe una cesta con ese identificador.' : 'No se pudo crear la cesta.',
+      code: duplicada ? 'CESTA_EXISTS' : 'DB_ERROR',
+    });
+    return;
+  }
+
+  // Llave por nodo — solo se devuelve en claro aquí.
+  const apiKey = `bs_${randomBytes(24).toString('hex')}`;
+  const claveHash = createHash('sha256').update(apiKey, 'utf8').digest('hex');
+  try {
+    await query(
+      `INSERT INTO iot_devices (id, cesta_id, clave_hash, descripcion, activo)
+       VALUES ($1, $2, $3, $4, true)
+       ON CONFLICT (id) DO UPDATE
+         SET cesta_id = EXCLUDED.cesta_id,
+             clave_hash = EXCLUDED.clave_hash,
+             activo = true`,
+      [deviceId, cestaId, claveHash, `Nodo de ${ubicacion}`.slice(0, 200)],
+    );
+  } catch (err: any) {
+    res.status(500).json({ error: 'Cesta creada, pero no se pudo emitir la llave del nodo.', code: 'IOT_KEY_ERROR' });
+    return;
+  }
+
+  res.status(201).json({
+    success: true,
+    cesta: { id: cestaId, cliente_id: clienteId, ubicacion, fecha_instalacion: fecha, activa: true },
+    iot: {
+      device_id: deviceId,
+      cesta_id: cestaId,
+      api_key: apiKey,
+      nota: 'Guarde esta llave: no se vuelve a mostrar. Va en el header X-API-Key.',
+    },
+  });
+});
 
 router.get('/', async (req: Request, res: Response) => {
   const clienteId = (req as any).cliente?.clienteId;
@@ -33,7 +111,13 @@ router.get('/', async (req: Request, res: Response) => {
                 (SELECT t.niveles_nh3_ppm FROM telemetria_cestas t
                  WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultimo_nh3,
                 (SELECT t.biomasa_larvaria_estimada_kg FROM telemetria_cestas t
-                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultima_biomasa
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultima_biomasa,
+                (SELECT t.peso_riel_kg FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultimo_peso,
+                (SELECT t.tds_ppm FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultimo_tds,
+                (SELECT t.ph FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultimo_ph
          FROM cestas c
          WHERE c.cliente_id = $1
          ORDER BY c.fecha_instalacion DESC`,

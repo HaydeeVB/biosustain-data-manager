@@ -43,6 +43,9 @@ const metricSchema = z.object({
     amoniaco_ppm: z.number().min(0).max(500).optional(),
     co2_ppm: z.number().min(0).max(5000).optional(),
     peso_riel_kg: z.number().min(0).max(100).optional(),
+    // Sensores del nodo de campo (2026-10-24): TDS y pH del lixiviado.
+    tds_ppm: z.number().min(0).max(10000).optional(),
+    ph: z.number().min(0).max(14).optional(),
   }),
   actuadores: z.object({
     aspersor_auto_status: z.number().int().min(0).max(1).optional(),
@@ -95,14 +98,17 @@ router.post('/metrics', authenticateIotDevice, async (req: Request, res: Respons
   );
 
   // Si hay DB, almacenar telemetría
+  let persistido = false;
   if (isDbConfigured()) {
     try {
       await query(
         `INSERT INTO telemetria_cestas
          (timestamp, cesta_id, planta_id, temp_ambiente, humedad_relativa,
-          temp_interna_sustrato, niveles_nh3_ppm, co2_ppm, degradacion_residuo_kg,
-          biomasa_larvaria_estimada_kg, aspersor_activo, extractor_activo)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          temp_interna_sustrato, niveles_nh3_ppm, co2_ppm, peso_riel_kg,
+          tds_ppm, ph,
+          degradacion_residuo_kg, biomasa_larvaria_estimada_kg,
+          aspersor_activo, extractor_activo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
         [
           ts,
           data.cesta_id,
@@ -112,12 +118,16 @@ router.post('/metrics', authenticateIotDevice, async (req: Request, res: Respons
           data.sensores.temperatura_sustrato_c,
           data.sensores.amoniaco_ppm,
           data.sensores.co2_ppm,
+          data.sensores.peso_riel_kg ?? null,
+          data.sensores.tds_ppm ?? null,
+          data.sensores.ph ?? null,
           null, // degradacion_residuo_kg — se calcula luego
           null, // biomasa_larvaria_estimada_kg — se calcula luego
           data.actuadores?.aspersor_auto_status === 1,
           data.actuadores?.ventilacion_status === 1,
         ]
       );
+      persistido = true;
     } catch (err) {
       console.error('[IoT] Error guardando en DB:', err);
       // No fallar el request — el ESP32 necesita la respuesta de control
@@ -127,6 +137,7 @@ router.post('/metrics', authenticateIotDevice, async (req: Request, res: Respons
   // Responder con decisión de control (formato compatible con firmware existente)
   res.json({
     status: 'success',
+    persistido,
     received_data: data,
     ...evaluation,
     timestamp: ts,

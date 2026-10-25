@@ -405,6 +405,7 @@ export default function DashboardPage() {
         {/* ── CESTAS ── */}
         {tab === 'cestas' && dashboard && (
           <div className="animate-in">
+            <CestaForm onCreated={() => loadDashboard(token!)} />
             {dashboard.cestas?.length > 0 ? (
               <div className="cesta-grid" style={{ display: 'grid', gap: 16 }}>
                 {dashboard.cestas.map((c: any) => (
@@ -638,6 +639,11 @@ function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detaile
   const hum = cesta.ultimaHumedad;
   const co2 = cesta.ultimoCo2;
   const nh3 = cesta.ultimoNh3;
+  const tds = cesta.ultimoTds;
+  const ph = cesta.ultimoPh;
+  const peso = cesta.ultimoPeso;
+  const hayLecturas = temp != null || hum != null || co2 != null || nh3 != null
+    || tds != null || ph != null || peso != null;
   const hasAlert = (temp && temp > 32) || (hum && hum < 50);
 
   return (
@@ -745,6 +751,189 @@ function LoteCard({ lote }: { lote: any }) {
 }
 
 const RESIDUO_OTRO = 'Otro (especificar)';
+
+/**
+ * CestaForm — crear una cesta desde el panel.
+ *
+ * Hasta 2026-10-24 no existía: solo se podían ver las cestas de demostración.
+ * Crear una cesta emite además la llave del nodo IoT, que se muestra UNA SOLA VEZ
+ * (en la base solo queda el sha256). Esa llave es la que se graba en el ESP32.
+ */
+function CestaForm({ onCreated }: { onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [ubicacion, setUbicacion] = useState('');
+  const [cestaId, setCestaId] = useState('');
+  const [deviceId, setDeviceId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [created, setCreated] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
+
+  const reset = () => {
+    setUbicacion(''); setCestaId(''); setDeviceId('');
+    setError(''); setCreated(null); setCopied(false); setLoading(false);
+  };
+
+  const handleSubmit = async () => {
+    if (ubicacion.trim().length < 2) { setError('Indica una ubicación (ej. “Galpón 2 — Maracay”).'); return; }
+    setLoading(true); setError('');
+    try {
+      const token = localStorage.getItem('biosustain_token');
+      const res = await fetch(`${API_URL}/api/v1/cestas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          ubicacion: ubicacion.trim(),
+          id: cestaId.trim() || undefined,
+          device_id: deviceId.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCreated(data);
+        onCreated();
+      } else {
+        setError(data.error || 'No se pudo crear la cesta.');
+      }
+    } catch {
+      setError('No se pudo conectar al servidor.');
+    }
+    setLoading(false);
+  };
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(created?.iot?.api_key || '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch { setError('Copia la llave manualmente.'); }
+  };
+
+  if (!open) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <button
+          onClick={() => { setOpen(true); reset(); }}
+          style={{
+            padding: '10px 18px', borderRadius: 10, cursor: 'pointer',
+            border: `1px solid ${C.green}`, background: C.greenGlow, color: C.green,
+            fontSize: 13, fontWeight: 700, fontFamily: C.font,
+          }}
+        >
+          + Nueva cesta
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      background: C.card, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 20,
+    }}>
+      {created ? (
+        <div>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4, fontFamily: C.fontDisplay }}>
+            Cesta creada
+          </h3>
+          <p style={{ fontSize: 13, color: C.text2, marginBottom: 16 }}>
+            {created.cesta?.id} · nodo {created.iot?.device_id} · {created.cesta?.ubicacion}
+          </p>
+
+          <div style={{ fontSize: 11, color: C.warn, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Llave del nodo — no se vuelve a mostrar
+          </div>
+          <div style={{
+            display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap',
+          }}>
+            <code style={{
+              flex: '1 1 320px', padding: '12px 14px', borderRadius: 10, background: C.bg2,
+              border: `1px solid ${C.border}`, color: C.text, fontSize: 12,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', wordBreak: 'break-all',
+            }}>
+              {created.iot?.api_key}
+            </code>
+            <button onClick={copiar} style={{
+              padding: '10px 16px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${C.borderHover}`,
+              background: 'transparent', color: copied ? C.green : C.text, fontSize: 13, fontWeight: 600,
+            }}>
+              {copied ? 'Copiada ✓' : 'Copiar'}
+            </button>
+          </div>
+          <p style={{ fontSize: 12, color: C.text3, marginTop: 10 }}>
+            Va en el header <code>X-API-Key</code> del firmware. Guárdala ahora: si se pierde hay que emitir otra.
+          </p>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <button onClick={reset} style={{
+              padding: '10px 18px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${C.green}`,
+              background: C.greenGlow, color: C.green, fontSize: 13, fontWeight: 700,
+            }}>
+              Crear otra
+            </button>
+            <button onClick={() => { setOpen(false); reset(); }} style={{
+              padding: '10px 18px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${C.border}`,
+              background: 'transparent', color: C.text2, fontSize: 13, fontWeight: 600,
+            }}>
+              Listo
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4, fontFamily: C.fontDisplay }}>
+            Nueva cesta
+          </h3>
+          <p style={{ fontSize: 13, color: C.text2, marginBottom: 20 }}>
+            Registra una unidad de bioconversión. Al crearla se emite la llave del nodo para el ESP32.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Ubicación *</label>
+              <input value={ubicacion} onChange={e => setUbicacion(e.target.value)}
+                placeholder="Ej. Galpón 2 — Maracay" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Identificador (opcional)</label>
+              <input value={cestaId} onChange={e => setCestaId(e.target.value)}
+                placeholder="Se genera automático" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Nombre del nodo (opcional)</label>
+              <input value={deviceId} onChange={e => setDeviceId(e.target.value)}
+                placeholder="Se genera automático" style={inputStyle} />
+            </div>
+          </div>
+
+          {error && (
+            <div style={{
+              marginTop: 16, padding: '10px 14px', borderRadius: 10,
+              background: 'rgba(255,90,90,0.08)', border: `1px solid ${C.danger}`,
+              color: C.danger, fontSize: 13,
+            }}>{error}</div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <button onClick={handleSubmit} disabled={loading} style={{
+              padding: '12px 24px', borderRadius: 10, cursor: loading ? 'default' : 'pointer',
+              border: 'none', background: C.green, color: '#04120a',
+              fontSize: 14, fontWeight: 700, opacity: loading ? 0.6 : 1,
+            }}>
+              {loading ? 'Creando…' : 'Crear cesta'}
+            </button>
+            <button onClick={() => { setOpen(false); reset(); }} style={{
+              padding: '12px 20px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${C.border}`,
+              background: 'transparent', color: C.text2, fontSize: 14, fontWeight: 600,
+            }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function LoteForm({ onCreated, cestas }: { onCreated: () => void; cestas: any[] }) {
   const [categoria, setCategoria] = useState('plantas');

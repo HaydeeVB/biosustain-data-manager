@@ -29,7 +29,13 @@ router.get('/', async (req: Request, res: Response) => {
                 (SELECT t.niveles_nh3_ppm FROM telemetria_cestas t
                  WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultimo_nh3,
                 (SELECT t.biomasa_larvaria_estimada_kg FROM telemetria_cestas t
-                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultima_biomasa
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultima_biomasa,
+                (SELECT t.peso_riel_kg FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultimo_peso,
+                (SELECT t.tds_ppm FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultimo_tds,
+                (SELECT t.ph FROM telemetria_cestas t
+                 WHERE t.cesta_id = c.id ORDER BY t.timestamp DESC LIMIT 1) AS ultimo_ph
          FROM cestas c
          WHERE c.cliente_id = $1
          ORDER BY c.fecha_instalacion DESC`,
@@ -45,6 +51,9 @@ router.get('/', async (req: Request, res: Response) => {
         ultimoCo2: r.ultimo_co2 ? parseFloat(r.ultimo_co2) : null,
         ultimoNh3: r.ultimo_nh3 ? parseFloat(r.ultimo_nh3) : null,
         ultimaBiomasa: r.ultima_biomasa ? parseFloat(r.ultima_biomasa) : null,
+        ultimoPeso: r.ultimo_peso ? parseFloat(r.ultimo_peso) : null,
+        ultimoTds: r.ultimo_tds ? parseFloat(r.ultimo_tds) : null,
+        ultimoPh: r.ultimo_ph ? parseFloat(r.ultimo_ph) : null,
       }));
 
       const cestasActivas = cestas.filter(c => c.estado === 'activa').length;
