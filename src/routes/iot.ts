@@ -87,12 +87,20 @@ const ALIAS_SENSORES: Record<string, keyof z.infer<typeof metricSchema>['sensore
   ph: 'ph',
   peso: 'peso_riel_kg',
   peso_kg: 'peso_riel_kg',
+  peso_g: 'peso_riel_kg',
+  peso_gramos: 'peso_riel_kg',
+  peso_gr: 'peso_riel_kg',
   co2: 'co2_ppm',
   temperatura: 'temperatura_sustrato_c',
   temp: 'temperatura_sustrato_c',
   humedad: 'humedad_sustrato_pct',
   amoniaco: 'amoniaco_ppm',
 };
+
+// Campos que el firmware expresa en gramos: se convierten a kg antes de validar, porque
+// el esquema está en kg. Un nodo que imprime "Peso: 4800 g" manda 4800, y sin esto el
+// request se rechaza por rango (>100) sin explicación visible en el monitor serial.
+const ALIAS_GRAMOS = new Set(['peso_g', 'peso_gramos', 'peso_gr']);
 
 function normalizarPayload(body: any): any {
   if (!body || typeof body !== 'object') return body;
@@ -113,8 +121,14 @@ function normalizarPayload(body: any): any {
   for (const [clave, valor] of Object.entries(body)) {
     if (reservados.has(clave)) continue;
     const destino = ALIAS_SENSORES[clave.toLowerCase()];
-    if (destino) sensores[destino] = valor;
-    else sobrantes.push(clave);
+    if (destino) {
+      let v = valor;
+      if (ALIAS_GRAMOS.has(clave.toLowerCase())) {
+        const n = Number(valor);
+        if (Number.isFinite(n)) v = n / 1000;
+      }
+      sensores[destino] = v;
+    } else sobrantes.push(clave);
   }
 
   const normalizado: any = {

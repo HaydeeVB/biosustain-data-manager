@@ -232,11 +232,16 @@ router.get('/sparklines/all', async (req: Request, res: Response) => {
       [clienteId]
     );
 
-    const sparklines: Record<string, { temp: number[]; humedad: number[]; co2: number[]; nh3: number[]; biomasa: number[] }> = {};
+    const sparklines: Record<string, {
+      temp: (number | null)[]; humedad: (number | null)[]; co2: (number | null)[];
+      nh3: (number | null)[]; biomasa: (number | null)[];
+      tds: (number | null)[]; ph: (number | null)[]; peso: (number | null)[];
+    }> = {};
 
     for (const cesta of cestasResult.rows) {
       const result = await query(
-        `SELECT temp_ambiente, humedad_relativa, co2_ppm, niveles_nh3_ppm, biomasa_larvaria_estimada_kg
+        `SELECT temp_ambiente, humedad_relativa, co2_ppm, niveles_nh3_ppm,
+                biomasa_larvaria_estimada_kg, tds_ppm, ph, peso_riel_kg
          FROM telemetria_cestas
          WHERE cesta_id = $1
          ORDER BY timestamp DESC
@@ -245,12 +250,18 @@ router.get('/sparklines/all', async (req: Request, res: Response) => {
       );
       // Reverse so oldest is first (left to right)
       const rows = result.rows.reverse();
+      // null se queda null: convertir a 0 hacía que el panel dibujara gráficos vacíos
+      // para sensores que la cesta no tiene (una cesta de campo no mide temperatura).
+      const num = (v: any) => (v === null || v === undefined ? null : parseFloat(v));
       sparklines[cesta.id] = {
-        temp: rows.map((r: any) => parseFloat(r.temp_ambiente || 0)),
-        humedad: rows.map((r: any) => parseFloat(r.humedad_relativa || 0)),
-        co2: rows.map((r: any) => parseFloat(r.co2_ppm || 0)),
-        nh3: rows.map((r: any) => parseFloat(r.niveles_nh3_ppm || 0)),
-        biomasa: rows.map((r: any) => parseFloat(r.biomasa_larvaria_estimada_kg || 0)),
+        temp: rows.map((r: any) => num(r.temp_ambiente)),
+        humedad: rows.map((r: any) => num(r.humedad_relativa)),
+        co2: rows.map((r: any) => num(r.co2_ppm)),
+        nh3: rows.map((r: any) => num(r.niveles_nh3_ppm)),
+        biomasa: rows.map((r: any) => num(r.biomasa_larvaria_estimada_kg)),
+        tds: rows.map((r: any) => num(r.tds_ppm)),
+        ph: rows.map((r: any) => num(r.ph)),
+        peso: rows.map((r: any) => num(r.peso_riel_kg)),
       };
     }
 

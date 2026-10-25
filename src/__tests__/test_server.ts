@@ -280,6 +280,17 @@ describe('BioSustain SaaS API', () => {
       expect(res.status).toBe(200);
       expect(res.body.campos_ignorados).toContain('tds_ppm2');
     });
+
+    // El monitor serial del nodo imprime gramos ("Peso: 4800 g"). Si eso se envía como
+    // `peso`, cae fuera del rango en kg y el nodo se queda sin explicación.
+    it('POST /api/v1/iot/metrics → convierte peso_g (gramos) a kg', async () => {
+      const res = await request(app)
+        .post('/api/v1/iot/metrics')
+        .set('X-API-Key', 'test-key')
+        .send({ nodo: 'NODO-RURAL-01', cesta: 'CESTA-RURAL-01', peso_g: 4800 });
+      expect(res.status).toBe(200);
+      expect(res.body.received_data.sensores.peso_riel_kg).toBe(4.8);
+    });
   });
 
   describe('NDA (click-wrap)', () => {

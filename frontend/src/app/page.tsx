@@ -41,7 +41,7 @@ export default function DashboardPage() {
   const [plans, setPlans] = useState<any>(null);
   const [subscription, setSubscription] = useState<any>(null);
   const [lotes, setLotes] = useState<any[]>([]);
-  const [sparklines, setSparklines] = useState<Record<string, { temp: number[]; humedad: number[]; co2: number[]; nh3: number[]; biomasa: number[] }>>({});
+  const [sparklines, setSparklines] = useState<Record<string, { temp: (number | null)[]; humedad: (number | null)[]; co2: (number | null)[]; nh3: (number | null)[]; biomasa: (number | null)[]; tds?: (number | null)[]; ph?: (number | null)[]; peso?: (number | null)[] }>>({});
   const [publicStats, setPublicStats] = useState({ cestas: 0, eficiencia: 0, co2e: 0 });
   const [cliente, setCliente] = useState<any>(null);
   const [pendingPayment, setPendingPayment] = useState<any>(null);
@@ -634,7 +634,7 @@ export default function DashboardPage() {
 // COMPONENTS
 // ═══════════════════════════════════════════════════════════════════
 
-function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detailed?: boolean; sparkline?: { temp: number[]; humedad: number[]; co2: number[]; nh3: number[]; biomasa: number[] } }) {
+function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detailed?: boolean; sparkline?: { temp: (number | null)[]; humedad: (number | null)[]; co2: (number | null)[]; nh3: (number | null)[]; biomasa: (number | null)[]; tds?: (number | null)[]; ph?: (number | null)[]; peso?: (number | null)[] } }) {
   const temp = cesta.ultimaTemp;
   const hum = cesta.ultimaHumedad;
   const co2 = cesta.ultimoCo2;
@@ -686,40 +686,37 @@ function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detaile
           </div>
         );
       })()}
-      {sparkline && (sparkline.temp.length > 1 || sparkline.humedad.length > 1) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid #1a2515' }}>
-          {sparkline.temp.length > 1 && (
-            <div>
-              <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>Temp</div>
-              <Sparkline data={sparkline.temp} color={temp > 32 ? '#e8a000' : '#3eb002'} width={80} height={20} />
-            </div>
-          )}
-          {sparkline.humedad.length > 1 && (
-            <div>
-              <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>Humedad</div>
-              <Sparkline data={sparkline.humedad} color={hum < 50 ? '#e8a000' : '#3eb002'} width={80} height={20} />
-            </div>
-          )}
-          {sparkline.co2 && sparkline.co2.length > 1 && (
-            <div>
-              <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>CO₂</div>
-              <Sparkline data={sparkline.co2} color={co2 && co2 > 1200 ? '#e8a000' : '#3eb002'} width={80} height={20} />
-            </div>
-          )}
-          {sparkline.nh3 && sparkline.nh3.length > 1 && (
-            <div>
-              <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>NH₃</div>
-              <Sparkline data={sparkline.nh3} color={nh3 && nh3 > 30 ? '#e8a000' : '#3eb002'} width={80} height={20} />
-            </div>
-          )}
-          {detailed && sparkline.biomasa.length > 1 && (
-            <div>
-              <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>Biomasa</div>
-              <Sparkline data={sparkline.biomasa} color="#3eb002" width={80} height={20} />
-            </div>
-          )}
-        </div>
-      )}
+      {sparkline && (() => {
+            // Series con datos reales: se descartan los null (sensores que la cesta no tiene)
+            // y se exige más de un punto. Antes el endpoint mandaba 0 en lugar de null, así
+            // que una cesta de campo mostraba cuatro gráficos vacíos como si faltara todo.
+            const serie = (arr?: (number | null)[]) =>
+              (arr || []).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+            const series: { label: string; data: number[]; color: string }[] = [];
+            const push = (label: string, arr: (number | null)[] | undefined, color: string) => {
+              const data = serie(arr);
+              if (data.length > 1) series.push({ label, data, color });
+            };
+            push('TDS', sparkline.tds, C.green);
+            push('pH', sparkline.ph, C.green);
+            push('Peso', sparkline.peso, C.green);
+            push('CO₂ est.', sparkline.co2, co2 && co2 > 1200 ? C.warn : C.green);
+            push('Temp', sparkline.temp, temp && temp > 32 ? C.warn : C.green);
+            push('Humedad', sparkline.humedad, hum && hum < 50 ? C.warn : C.green);
+            push('NH₃', sparkline.nh3, nh3 && nh3 > 30 ? C.warn : C.green);
+            if (detailed) push('Biomasa', sparkline.biomasa, C.green);
+            if (!series.length) return null;
+            return (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '#1a2515 1px solid' }}>
+                {series.map((s) => (
+                  <div key={s.label}>
+                    <div style={{ fontSize: 9, color: '#555', textTransform: 'uppercase', marginBottom: 2 }}>{s.label}</div>
+                    <Sparkline data={s.data} color={s.color} width={80} height={20} />
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
     </div>
   );
 }
