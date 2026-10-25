@@ -107,7 +107,7 @@ router.get('/', async (req: Request, res: Response) => {
       eficiencia: eficiencia,
       totalLotes: lotes.length,
       cestasMonitoreadas: cestasMonitoreadas,
-      descripcion: 'Métricas calculadas desde lotes registrados y telemetría de cestas. Metodología IPCC.',
+      descripcion: 'Estimaciones calculadas a partir de los lotes registrados (factores por categoría de residuo) y de la telemetría de las cestas. Son estimaciones, no una certificación: la verificación bajo metodología IPCC requiere un verificador externo.',
       ultimaActualizacion: new Date().toISOString(),
     });
   } catch (err: any) {

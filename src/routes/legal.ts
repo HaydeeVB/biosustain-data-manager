@@ -30,7 +30,7 @@ const PRIVACIDAD_TEXTO = `
 <h3>5. Retención y derechos</h3>
 <p>Conservamos los datos mientras la cuenta esté activa o según exija la ley. Puedes solicitar acceso, corrección o eliminación de tus datos contactando a tu administrador de cuenta.</p>
 <h3>6. Estimaciones, no certificaciones</h3>
-<p>Los reportes ESG son <strong>estimaciones preliminares</strong> calculadas con metodologías IPCC; no constituyen certificación de terceros.</p>
+<p>Los reportes ESG son <strong>estimaciones preliminares</strong> calculadas con factores de emisión por categoría de residuo; no constituyen certificación de terceros ni una verificación bajo metodología IPCC.</p>
 <h3>7. Contacto</h3>
 <p>BioSustain Research Lab (Bio Morphix C.A.) — Aragua, Venezuela.</p>
 `;

@@ -367,7 +367,7 @@ export default function DashboardPage() {
             {tab === 'resumen' && 'Estado general de tu operación de bioconversión'}
             {tab === 'cestas' && 'Monitoreo en tiempo real de tus unidades de bioconversión'}
             {tab === 'lotes' && 'Registra residuos orgánicos y obtén proyecciones automáticas'}
-            {tab === 'esg' && 'Impacto ambiental calculado según metodologías IPCC'}
+            {tab === 'esg' && 'Estimaciones de impacto ambiental por factores de emisión por categoría'}
             {tab === 'facturacion' && 'Gestiona tu plan de suscripción'}
             {tab === 'ajustes' && 'Gestiona tu cuenta y contraseña'}
           </p>
@@ -462,9 +462,9 @@ export default function DashboardPage() {
             }}>
               <h3 style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 12, fontFamily: C.fontDisplay }}>Metodología</h3>
               <p style={{ fontSize: 13, color: C.text2, lineHeight: 1.7 }}>
-                Las métricas son <strong>estimaciones</strong> calculadas según metodologías IPCC para mitigación de gases de efecto invernadero (GEI).
+                Las métricas son <strong>estimaciones</strong> calculadas con factores de emisión por categoría de residuo.
                 Los datos provienen del registro de lotes orgánicos procesados por bioconversión con <em>Hermetia illucens</em> (BSF).
-                Estos valores son preliminares y no constituyen una certificación de terceros; verifícalos antes de cualquier uso regulatorio.
+                Estos valores son preliminares y no constituyen una certificación de terceros; una verificación bajo metodología IPCC requiere un verificador externo.
               </p>
             </div>
           </div>

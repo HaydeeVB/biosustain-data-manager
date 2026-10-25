@@ -118,7 +118,7 @@ else:
 
 s.append(Spacer(1, 0.3*inch))
 s.append(Paragraph('Metodología y Alcance', hs))
-s.append(Paragraph('Este reporte fue generado automáticamente por la plataforma BioSustain. Las métricas son estimaciones preliminares calculadas según metodologías IPCC para mitigación de gases de efecto invernadero (GEI). No constituyen una certificación de terceros; verifícalos antes de cualquier uso regulatorio o de auditoría. Los datos provienen del registro de lotes orgánicos procesados por bioconversión con Hermetia illucens (BSF).', bs))
+s.append(Paragraph('Este reporte fue generado automáticamente por la plataforma BioSustain. Las métricas son estimaciones preliminares calculadas con factores de emisión por categoría de residuo. No constituyen una certificación de terceros ni una verificación bajo metodología IPCC, que requiere un verificador externo. Verifícalos antes de cualquier uso regulatorio o de auditoría. Los datos provienen del registro de lotes orgánicos procesados por bioconversión con Hermetia illucens (BSF).', bs))
 s.append(Spacer(1, 0.2*inch))
 s.append(Paragraph('BioSustain Research Lab — Plataforma de bioconversión sostenible', bs))
 
@@ -156,6 +156,6 @@ function generateTextReport(data: ReportData): string {
   data.lotes.forEach(l => {
     report += `- ${l.id}: ${l.tipoResiduo}, ${l.pesoKg} kg, biomasa ${l.biomasaKg} kg, CO2e ${l.co2eKg} kg\n`;
   });
-  report += `\nBioSustain Research Lab — Metodologias IPCC`;
+  report += `\nBioSustain Research Lab — Estimaciones por factores de categoría (no certificadas)`;
   return report;
 }
