@@ -642,8 +642,6 @@ function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detaile
   const tds = cesta.ultimoTds;
   const ph = cesta.ultimoPh;
   const peso = cesta.ultimoPeso;
-  const hayLecturas = temp != null || hum != null || co2 != null || nh3 != null
-    || tds != null || ph != null || peso != null;
   const hasAlert = (temp && temp > 32) || (hum && hum < 50);
 
   return (
@@ -660,32 +658,34 @@ function CestaCard({ cesta, detailed = false, sparkline }: { cesta: any; detaile
         }}>{cesta.estado || 'activa'}</span>
       </div>
       <div style={{ fontSize: 12, color: '#9a9a9a', marginBottom: 14 }}>📍 {cesta.ubicacion || 'Sin ubicación'}</div>
-      {(temp !== null || hum !== null || co2 !== null || nh3 !== null) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 13 }}>
-          <div>
-            <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>Temp</div>
-            <div style={{ fontWeight: 600, color: temp > 32 ? '#e8a000' : '#3eb002' }}>{temp ? `${temp.toFixed(1)}°C` : '—'}</div>
+      {(() => {
+        // Sólo se muestran las métricas que la cesta realmente reporta. Un nodo de campo
+        // (TDS + pH + MQ-135 + celda de carga) no mide temperatura ni humedad: mostrar
+        // "—" en esas columnas hace parecer que el nodo está incompleto.
+        const celdas: { label: string; valor: string; color: string }[] = [];
+        if (tds != null) celdas.push({ label: 'TDS', valor: `${tds.toFixed(0)} ppm`, color: C.green });
+        if (ph != null) celdas.push({ label: 'pH', valor: ph.toFixed(2), color: ph < 6 || ph > 8.5 ? C.warn : C.green });
+        if (peso != null) celdas.push({ label: 'Peso', valor: `${peso.toFixed(2)} kg`, color: C.green });
+        // MQ-135 no es un medidor de CO₂ calibrado: se rotula como estimado.
+        if (co2 != null) celdas.push({ label: 'CO₂ est.', valor: `${co2.toFixed(0)} ppm`, color: co2 > 1200 ? C.warn : C.green });
+        if (temp != null) celdas.push({ label: 'Temp', valor: `${temp.toFixed(1)}°C`, color: temp > 32 ? C.warn : C.green });
+        if (hum != null) celdas.push({ label: 'Humedad', valor: `${hum.toFixed(0)}%`, color: hum < 50 ? C.warn : C.green });
+        if (nh3 != null) celdas.push({ label: 'NH₃', valor: `${nh3.toFixed(1)} ppm`, color: nh3 > 30 ? C.warn : C.green });
+        if (detailed && cesta.ultimaBiomasa != null) {
+          celdas.push({ label: 'Biomasa', valor: `${cesta.ultimaBiomasa.toFixed(1)} kg`, color: C.green });
+        }
+        if (!celdas.length) return null;
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 13 }}>
+            {celdas.map((c) => (
+              <div key={c.label}>
+                <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>{c.label}</div>
+                <div style={{ fontWeight: 600, color: c.color }}>{c.valor}</div>
+              </div>
+            ))}
           </div>
-          <div>
-            <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>Humedad</div>
-            <div style={{ fontWeight: 600, color: hum < 50 ? '#e8a000' : '#3eb002' }}>{hum ? `${hum.toFixed(0)}%` : '—'}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>CO₂</div>
-            <div style={{ fontWeight: 600, color: co2 && co2 > 1200 ? '#e8a000' : '#3eb002' }}>{co2 ? `${co2.toFixed(0)} ppm` : '—'}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>NH₃</div>
-            <div style={{ fontWeight: 600, color: nh3 && nh3 > 30 ? '#e8a000' : '#3eb002' }}>{nh3 ? `${nh3.toFixed(1)} ppm` : '—'}</div>
-          </div>
-          {detailed && cesta.ultimaBiomasa && (
-            <div>
-              <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase' }}>Biomasa</div>
-              <div style={{ fontWeight: 600, color: '#3eb002' }}>{cesta.ultimaBiomasa.toFixed(1)} kg</div>
-            </div>
-          )}
-        </div>
-      )}
+        );
+      })()}
       {sparkline && (sparkline.temp.length > 1 || sparkline.humedad.length > 1) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid #1a2515' }}>
           {sparkline.temp.length > 1 && (

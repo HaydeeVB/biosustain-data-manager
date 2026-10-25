@@ -235,6 +235,50 @@ describe('BioSustain SaaS API', () => {
         .send({ invalid: 'payload' });
       expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
+      // El 400 dice qué nombres llegaron: sin esto, un campo mal escrito se depura a ciegas.
+      expect(res.body.campos_recibidos).toBeInstanceOf(Array);
+    });
+
+    // El firmware del nodo de campo manda nombres planos en español, no el contrato
+    // anidado. Aceptarlos evita una ronda de recompilación por cada despliegue.
+    it('POST /api/v1/iot/metrics → acepta alias planos (cesta/nodo/tds/ph/peso/co2)', async () => {
+      const res = await request(app)
+        .post('/api/v1/iot/metrics')
+        .set('X-API-Key', 'test-key')
+        .send({
+          cesta: 'CESTA-RURAL-01',
+          nodo: 'NODO-RURAL-01',
+          tds: 742.5,
+          ph: 7.83,
+          peso: 12.35,
+          co2: 1180,
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('success');
+      expect(res.body.received_data.cesta_id).toBe('CESTA-RURAL-01');
+      expect(res.body.received_data.device_id).toBe('NODO-RURAL-01');
+      expect(res.body.received_data.sensores.tds_ppm).toBe(742.5);
+      expect(res.body.received_data.sensores.ph).toBe(7.83);
+      expect(res.body.received_data.sensores.peso_riel_kg).toBe(12.35);
+      expect(res.body.received_data.sensores.co2_ppm).toBe(1180);
+    });
+
+    it('POST /api/v1/iot/metrics → tolera números enviados como texto', async () => {
+      const res = await request(app)
+        .post('/api/v1/iot/metrics')
+        .set('X-API-Key', 'test-key')
+        .send({ nodo: 'NODO-RURAL-01', cesta: 'CESTA-RURAL-01', tds: '680.0', ph: '7.4', peso: '9.8' });
+      expect(res.status).toBe(200);
+      expect(res.body.received_data.sensores.tds_ppm).toBe(680);
+    });
+
+    it('POST /api/v1/iot/metrics → reporta campos no reconocidos', async () => {
+      const res = await request(app)
+        .post('/api/v1/iot/metrics')
+        .set('X-API-Key', 'test-key')
+        .send({ nodo: 'NODO-RURAL-01', cesta: 'CESTA-RURAL-01', tds: 700, tds_ppm2: 999 });
+      expect(res.status).toBe(200);
+      expect(res.body.campos_ignorados).toContain('tds_ppm2');
     });
   });
 
