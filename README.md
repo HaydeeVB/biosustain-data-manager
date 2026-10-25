@@ -60,6 +60,24 @@ npm install
 npm run dev
 ```
 
+## Pruebas
+
+Los tests corren contra una base PostgreSQL real (`biosustain_test`), no en memoria: así las
+consultas SQL se ejercitan de verdad. **Nunca** contra producción — `src/__tests__/setup-env.ts`
+aborta si el nombre de la base no termina en `_test`.
+
+```bash
+# una vez (y de nuevo cuando cambie el esquema)
+psql -c "CREATE DATABASE biosustain_test;"
+psql -d biosustain_test -f scripts/05_test_db.sql
+
+npm test
+```
+
+`setup-env.ts` también ignora cualquier `DATABASE_URL` heredada del entorno. Eso no era
+cosmético: con una `DATABASE_URL` vieja apuntando a otra base, 19 de 26 tests fallaban con
+`relation "clientes" does not exist` y parecía que el código estaba roto.
+
 ## Equipo (BioSustain Research Lab)
 
 - **Haydee Zulay Viteri Bernal** — CEO & Fundadora, Estrategia

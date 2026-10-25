@@ -1,8 +1,19 @@
 /**
  * test_server.ts — Tests del servidor SaaS BioSustain.
+ *
+ * Requisitos: la base `biosustain_test` debe existir y tener el esquema. Se aprovisiona con
+ * `scripts/05_test_db.sql` (ver README). `setup-env.ts` apunta la app ahí y aborta si el
+ * nombre de la base no termina en `_test`.
  */
 import request from 'supertest';
 import app from '../server';
+import { closeDb } from '../db';
+
+// El pool de PostgreSQL mantiene el proceso vivo; se cierra al terminar la suite para que
+// `jest` salga limpio (antes avisaba "Jest did not exit one second after the test run").
+afterAll(async () => {
+  await closeDb();
+});
 
 describe('BioSustain SaaS API', () => {
 
@@ -82,7 +93,8 @@ describe('BioSustain SaaS API', () => {
         .get('/api/v1/auth/me')
         .set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
-      expect(res.body.email).toBe(testEmail);
+      // El endpoint devuelve { cliente: {...} } — es lo que consume el panel (data.cliente).
+      expect(res.body.cliente.email).toBe(testEmail);
     });
 
     it('GET /api/v1/auth/me → 401 sin token', async () => {
@@ -148,9 +160,12 @@ describe('BioSustain SaaS API', () => {
         .get('/api/v1/dashboard')
         .set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
-      expect(res.body.resumen).toBeDefined();
-      expect(res.body.metricas).toBeDefined();
-      expect(res.body.alertas).toBeInstanceOf(Array);
+      // Contrato real de GET /api/v1/dashboard (lo que consume el panel): contadores
+      // planos + el arreglo de cestas. Antes se afirmaba `resumen`/`metricas`, que el
+      // endpoint nunca devolvió — la aserción estaba desactualizada, no el código.
+      expect(typeof res.body.cestasActivas).toBe('number');
+      expect(typeof res.body.totalCestas).toBe('number');
+      expect(res.body.cestas).toBeInstanceOf(Array);
     });
   });
 
@@ -170,7 +185,11 @@ describe('BioSustain SaaS API', () => {
         .get('/api/v1/esg')
         .set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
-      expect(res.body.metricas).toBeDefined();
+      // Contrato real de GET /api/v1/esg: campos planos en toneladas (lo que lee el panel).
+      // `metricas` nunca existió en esta respuesta — la aserción estaba desactualizada.
+      expect(typeof res.body.residuosReconvertidos).toBe('number');
+      expect(typeof res.body.co2eReducido).toBe('number');
+      expect(typeof res.body.totalLotes).toBe('number');
     });
   });
 
@@ -263,13 +282,32 @@ describe('BioSustain SaaS API', () => {
 
   describe('Cerebro bridge', () => {
     let token: string;
+    let stub: import('http').Server;
 
+    // El Cerebro es un servicio aparte (Python/FastAPI en Cloud Run). Sin él, este bloque
+    // devolvía 502 y parecía que el bridge estaba roto. Un stub local en el puerto que
+    // apunta setup-env (CEREBRO_URL) hace la prueba determinista y sin red.
     beforeAll(async () => {
+      const http = await import('http');
+      stub = http.createServer((req, res) => {
+        let body = '';
+        req.on('data', (c) => { body += c; });
+        req.on('end', () => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ stub: true, path: req.url, biomasa_proyectada_kg: 3.42 }));
+        });
+      });
+      await new Promise<void>((resolve) => stub.listen(38999, '127.0.0.1', () => resolve()));
+
       const email = `cerebro_${Date.now()}@example.com`;
       const res = await request(app)
         .post('/api/v1/auth/register')
         .send({ nombre: 'Test Cerebro', email, password: 'TestPassword123!' });
       token = res.body.token;
+    });
+
+    afterAll(async () => {
+      if (stub) await new Promise<void>((resolve) => stub.close(() => resolve()));
     });
 
     it('POST /api/v1/cerebro/biomass-projection → 200 (modo demo)', async () => {
